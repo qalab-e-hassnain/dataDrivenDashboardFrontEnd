@@ -1,0 +1,199 @@
+.ai-forecasting-section {
+  background: white;
+  border-radius: 15px;
+  padding: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+  height: 500px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.ai-forecasting-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ai-forecasting-section::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.ai-forecasting-section::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+}
+
+.ai-forecasting-section::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #f3f4f6;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.section-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-icon {
+  font-size: 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.ml-tag {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.forecast-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.forecast-card {
+  padding: 15px;
+  border-radius: 12px;
+  color: white;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.completion-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.cost-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.forecast-card-title {
+  font-size: 11px;
+  opacity: 0.9;
+  margin-bottom: 8px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.forecast-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 5px 0 8px 0;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+}
+
+.forecast-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.forecast-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.detail-icon {
+  font-size: 12px;
+}
+
+.key-predictions {
+  margin-top: 0;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  color: white;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.predictions-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.predictions-icon {
+  font-size: 14px;
+}
+
+.predictions-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+  opacity: 0.95;
+}
+
+.predictions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prediction-item {
+  font-size: 10px;
+  color: white;
+  line-height: 1.4;
+  margin-bottom: 0;
+  opacity: 0.9;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.prediction-item::before {
+  content: '⚠️';
+  font-size: 10px;
+  margin-right: 2px;
+  flex-shrink: 0;
+  opacity: 1;
+  margin-top: 1px;
+}
