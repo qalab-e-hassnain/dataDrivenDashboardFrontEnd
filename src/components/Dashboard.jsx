@@ -116,8 +116,21 @@ function Dashboard() {
 
       clearTimeout(timeoutId)
 
-      // Check if we got any data at all
-      const hasAnyData = projectData || evmData || workforceData || inventoryData || forecastData || tasksData
+      // Check if we got any data at all - be more lenient
+      const hasAnyData = projectData || evmData || workforceData || inventoryData || forecastData || tasksData || alertsData || anomaliesData
+      
+      // Log what data we received for debugging
+      console.log('📊 API Response Summary:', {
+        projectData: !!projectData,
+        evmData: !!evmData,
+        workforceData: !!workforceData,
+        inventoryData: !!inventoryData,
+        forecastData: !!forecastData,
+        tasksData: !!tasksData,
+        alertsData: !!alertsData,
+        anomaliesData: !!anomaliesData,
+        hasAnyData,
+      })
 
       if (hasAnyData) {
         // Transform API data to dashboard format
@@ -133,26 +146,41 @@ function Dashboard() {
         }
 
         setDashboardData(transformedData)
+        setError(null) // Clear any previous errors
         
         if (isRefresh) {
           addToast('Data refreshed successfully', 'success')
         } else {
           // Show success message when project data is loaded
-          const projectName = projectData?.name || 'Project'
+          const projectName = projectData?.name || projectData?.title || 'Project'
           addToast(`${projectName} data loaded successfully`, 'success')
         }
       } else {
         // No data received - use mock data
-        console.warn('No data received from API - using mock data')
-        setError('No data received from API. Using mock data for demonstration.')
+        console.warn('⚠️ No data received from API - using mock data')
+        console.warn('Check: 1) CORS settings on API, 2) Environment variables in Azure, 3) API endpoint URLs')
+        setError('No data received from API. Using mock data for demonstration. Check browser console for details.')
         addToast('Using mock data - API returned no data', 'warning')
         setDashboardData(getMockData())
       }
     } catch (err) {
       clearTimeout(timeoutId)
-      console.error('Error loading dashboard:', err)
+      console.error('❌ Error loading dashboard:', err)
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        config: err.config?.url,
+      })
+      
+      // Check for specific error types
+      if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
+        console.error('🌐 Network Error: Check CORS settings on your API server')
+        console.error('The API must allow requests from:', window.location.origin)
+      }
+      
       const errorMessage = err.response?.data?.detail || err.message || 'Failed to load dashboard data'
-      setError(`Failed to load dashboard data: ${errorMessage}. Using mock data for demonstration.`)
+      setError(`Failed to load dashboard data: ${errorMessage}. Using mock data for demonstration. Check browser console for details.`)
       addToast('Using mock data - API error', 'warning')
       // Set mock data for development
       setDashboardData(getMockData())
