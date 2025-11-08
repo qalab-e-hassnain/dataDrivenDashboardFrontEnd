@@ -119,6 +119,22 @@ npm run build
 
 The built files will be in the `dist/` directory.
 
+## Deployment
+
+### Deploy to Azure Static Web Apps (Free Tier)
+
+This project is configured for deployment to Azure Static Web Apps. Follow the detailed deployment guide in [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+**Quick Steps:**
+1. Push code to GitHub (see [PUSH_TO_GITHUB.md](./PUSH_TO_GITHUB.md))
+2. Create Azure Static Web App resource
+3. Connect to your GitHub repository
+4. Configure build settings (output: `dist`)
+5. Set environment variables in Azure Portal
+6. Deploy!
+
+For detailed instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ## License
 
 MIT
