@@ -1,9 +1,17 @@
 import axios from 'axios'
 
-// Base URL for Azure Cloud API
-// For Vite, use import.meta.env.VITE_API_BASE_URL
-// Create a .env file with: VITE_API_BASE_URL=https://datadrivendashboard-bjaaaygjd6c9eadz.centralindia-01.azurewebsites.net/api
+// Base URL for API
+// For local testing: Create .env.local with VITE_API_BASE_URL=http://localhost:8000/api
+// For production: Uses Azure API URL or set VITE_API_BASE_URL in environment
+// Priority: .env.local > environment variable > default Azure URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://datadrivendashboard-bjaaaygjd6c9eadz.centralindia-01.azurewebsites.net/api'
+
+// Log API URL for debugging (only in development)
+if (import.meta.env.DEV) {
+  console.log('🔗 API Base URL:', API_BASE_URL)
+  console.log('🌐 Environment:', import.meta.env.MODE)
+  console.log('📝 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'Not set (using default)')
+}
 
 // Create axios instance with default config
 const api = axios.create({
@@ -430,17 +438,17 @@ export const apiService = {
 
   // ==================== File Upload API ====================
   
-  // Upload Excel File
+  // Upload File (Primavera endpoint - supports Excel and CSV)
   uploadExcelFile: async (projectId, file, onUploadProgress) => {
     try {
-      console.log('Uploading Excel file:', file.name, 'Size:', file.size, 'bytes')
+      console.log('Uploading file:', file.name, 'Size:', file.size, 'bytes')
       console.log('Project ID:', projectId)
       
       const formData = new FormData()
       formData.append('file', file)
       
-      // Try without trailing slash (API redirects from /excel/ to /excel)
-      let url = `/upload/project/${projectId}/excel`
+      // Use Primavera upload endpoint
+      let url = `/upload/project/${projectId}/primavera`
       console.log('Upload URL:', `${API_BASE_URL}${url}`)
       
       // Create a separate axios instance for file uploads with proper configuration
@@ -490,7 +498,7 @@ export const apiService = {
         try {
           const formData = new FormData()
           formData.append('file', file)
-          const retryUrl = `/upload/project/${projectId}/excel/`
+          const retryUrl = `/upload/project/${projectId}/primavera/`
           const response = await api.post(retryUrl, formData, {
             timeout: 120000,
             onUploadProgress: (progressEvent) => {
@@ -519,17 +527,17 @@ export const apiService = {
     }
   },
 
-  // Upload CSV File
+  // Upload CSV File (uses Primavera endpoint)
   uploadCSVFile: async (projectId, file, onUploadProgress) => {
     try {
-      console.log('Uploading CSV file:', file.name, 'Size:', file.size, 'bytes')
+      console.log('Uploading file:', file.name, 'Size:', file.size, 'bytes')
       console.log('Project ID:', projectId)
       
       const formData = new FormData()
       formData.append('file', file)
       
-      // Try without trailing slash (API redirects from /csv/ to /csv)
-      let url = `/upload/project/${projectId}/csv`
+      // Use Primavera upload endpoint
+      let url = `/upload/project/${projectId}/primavera`
       console.log('Upload URL:', `${API_BASE_URL}${url}`)
       
       // Create a separate axios instance for file uploads with proper configuration
@@ -579,7 +587,7 @@ export const apiService = {
         try {
           const formData = new FormData()
           formData.append('file', file)
-          const retryUrl = `/upload/project/${projectId}/csv/`
+          const retryUrl = `/upload/project/${projectId}/primavera/`
           const response = await api.post(retryUrl, formData, {
             timeout: 120000,
             onUploadProgress: (progressEvent) => {
