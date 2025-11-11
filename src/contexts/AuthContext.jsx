@@ -97,7 +97,20 @@ export const AuthProvider = ({ children }) => {
 
   // Permission checks
   const hasRole = (role) => {
-    return user?.role === role
+    if (!user) return false
+    // Normalize role for comparison (handle both snake_case and Title Case)
+    const normalizeRole = (r) => {
+      if (!r) return ''
+      const roleMap = {
+        'super_admin': 'Super Admin',
+        'org_admin': 'Org Admin',
+        'project_manager': 'Project Manager',
+        'team_member': 'Team Member',
+        'viewer': 'Viewer'
+      }
+      return roleMap[r.toLowerCase()] || r
+    }
+    return normalizeRole(user.role) === normalizeRole(role)
   }
 
   const hasAnyRole = (roles) => {
@@ -107,8 +120,24 @@ export const AuthProvider = ({ children }) => {
   const hasPermission = (permission) => {
     if (!user) return false
     
+    // Normalize role (backend uses snake_case, frontend uses Title Case)
+    const normalizeRole = (role) => {
+      if (!role) return ''
+      // Handle both formats: 'super_admin' and 'Super Admin'
+      const roleMap = {
+        'super_admin': 'Super Admin',
+        'org_admin': 'Org Admin',
+        'project_manager': 'Project Manager',
+        'team_member': 'Team Member',
+        'viewer': 'Viewer'
+      }
+      return roleMap[role.toLowerCase()] || role
+    }
+    
+    const normalizedRole = normalizeRole(user.role)
+    
     // Super Admin has all permissions
-    if (user.role === 'Super Admin') return true
+    if (normalizedRole === 'Super Admin') return true
     
     // Check role-based permissions
     const rolePermissions = {
@@ -129,7 +158,7 @@ export const AuthProvider = ({ children }) => {
       ]
     }
     
-    const allowed = rolePermissions[user.role] || []
+    const allowed = rolePermissions[normalizedRole] || []
     return allowed.includes(permission)
   }
 
