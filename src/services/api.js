@@ -1,10 +1,10 @@
 import axios from 'axios'
 
 // Base URL for API
-// For local testing: Create .env.local with VITE_API_BASE_URL=http://localhost:8000/api
-// For production: Uses Azure API URL or set VITE_API_BASE_URL in environment
-// Priority: .env.local > environment variable > default Azure URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://datadrivendashboard-bjaaaygjd6c9eadz.centralindia-01.azurewebsites.net/api'
+// For local testing: Uses localhost by default
+// For production: Set VITE_API_BASE_URL in environment variables
+// Priority: .env.local > environment variable > default localhost
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 // Log API URL for debugging (only in development)
 if (import.meta.env.DEV) {
