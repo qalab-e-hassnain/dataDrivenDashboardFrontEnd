@@ -50,3 +50,29 @@ export function KPISkeleton() {
     </div>
   )
 }
+
+// Default export with full dashboard loading skeleton
+export default function LoadingSkeleton() {
+  return (
+    <div className="dashboard-content">
+      <div className="top-section">
+        <KPISkeleton />
+      </div>
+
+      <div className="middle-section">
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+
+      <div className="bottom-section">
+        <ChartSkeleton />
+        <CardSkeleton />
+      </div>
+
+      <div className="bottom-section">
+        <ChartSkeleton />
+        <ChartSkeleton />
+      </div>
+    </div>
+  )
+}
