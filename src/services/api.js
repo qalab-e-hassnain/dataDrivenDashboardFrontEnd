@@ -23,7 +23,13 @@ const api = axios.create({
   maxRedirects: 5, // Follow redirects automatically
 })
 
-// Axios interceptor to remove Content-Type for FormData
+// Add token to requests if available
+const token = localStorage.getItem('access_token')
+if (token) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+}
+
+// Axios interceptor to handle token and FormData
 api.interceptors.request.use((config) => {
   // If data is FormData, remove Content-Type header to let browser set it with boundary
   if (config.data instanceof FormData) {
@@ -33,13 +39,59 @@ api.interceptors.request.use((config) => {
       delete config.headers.common['Content-Type']
     }
   }
+  
+  // Add token to each request if available
+  const currentToken = localStorage.getItem('access_token')
+  if (currentToken) {
+    config.headers.Authorization = `Bearer ${currentToken}`
+  }
+  
   return config
 })
 
-// Response interceptor for better error handling
+// Response interceptor for error handling and token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config
+    
+    // If 401 and we haven't tried to refresh yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
+      
+      try {
+        const refreshToken = localStorage.getItem('refresh_token')
+        if (refreshToken) {
+          console.log('🔄 Attempting token refresh...')
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+            refresh_token: refreshToken
+          })
+          
+          if (response.data.access_token) {
+            localStorage.setItem('access_token', response.data.access_token)
+            localStorage.setItem('refresh_token', response.data.refresh_token)
+            api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
+            originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`
+            
+            console.log('✅ Token refreshed successfully')
+            return api(originalRequest)
+          }
+        }
+      } catch (refreshError) {
+        console.error('❌ Token refresh failed:', refreshError)
+        // Clear tokens and redirect to login
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('user')
+        delete api.defaults.headers.common['Authorization']
+        // Redirect to login page
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
+        return Promise.reject(refreshError)
+      }
+    }
+    
     // Log CORS errors specifically
     if (error.message && (error.message.includes('CORS') || error.message.includes('Network Error') || error.message.includes('Failed to fetch'))) {
       console.error('🚨 CORS or Network Error detected:', error.message)
@@ -49,6 +101,7 @@ api.interceptors.response.use(
       console.error('3. The server is not reachable')
       console.error('4. Check browser console Network tab for preflight (OPTIONS) request')
     }
+    
     return Promise.reject(error)
   }
 )
@@ -612,6 +665,385 @@ export const apiService = {
         statusText: error.response?.statusText,
         url: error.config?.url,
       })
+      throw error
+    }
+  },
+
+  // ==================== Authentication API ====================
+  
+  // Register user
+  register: async (userData) => {
+    try {
+      const response = await api.post('/auth/register', userData)
+      return response.data
+    } catch (error) {
+      console.error('Registration error:', error)
+      throw error
+    }
+  },
+
+  // Login
+  login: async (email, password) => {
+    try {
+      const response = await api.post('/auth/login', { email, password })
+      // Store tokens
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token)
+        localStorage.setItem('refresh_token', response.data.refresh_token)
+        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
+      }
+      return response.data
+    } catch (error) {
+      console.error('Login error:', error)
+      throw error
+    }
+  },
+
+  // Refresh token
+  refreshToken: async (refreshToken) => {
+    try {
+      const response = await api.post('/auth/refresh', { refresh_token: refreshToken })
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token)
+        localStorage.setItem('refresh_token', response.data.refresh_token)
+        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`
+      }
+      return response.data
+    } catch (error) {
+      console.error('Token refresh error:', error)
+      throw error
+    }
+  },
+
+  // Get current user
+  getCurrentUser: async () => {
+    try {
+      const response = await api.get('/auth/me')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+      throw error
+    }
+  },
+
+  // Logout
+  logout: async () => {
+    try {
+      const response = await api.post('/auth/logout')
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      delete api.defaults.headers.common['Authorization']
+      return response.data
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Clear tokens anyway
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      delete api.defaults.headers.common['Authorization']
+      throw error
+    }
+  },
+
+  // ==================== User Management API ====================
+  
+  // Create user
+  createUser: async (userData) => {
+    try {
+      const response = await api.post('/users', userData)
+      return response.data
+    } catch (error) {
+      console.error('Error creating user:', error)
+      throw error
+    }
+  },
+
+  // Get users list with filters
+  getUsers: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams()
+      if (filters.organization_id) params.append('organization_id', filters.organization_id)
+      if (filters.role) params.append('role', filters.role)
+      if (filters.is_active !== undefined) params.append('is_active', filters.is_active)
+      if (filters.skip) params.append('skip', filters.skip)
+      if (filters.limit) params.append('limit', filters.limit)
+      
+      const response = await api.get(`/users?${params.toString()}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching users:', error)
+      throw error
+    }
+  },
+
+  // Get user by ID
+  getUser: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching user:', error)
+      throw error
+    }
+  },
+
+  // Update user
+  updateUser: async (userId, userData) => {
+    try {
+      const response = await api.put(`/users/${userId}`, userData)
+      return response.data
+    } catch (error) {
+      console.error('Error updating user:', error)
+      throw error
+    }
+  },
+
+  // Update user role (legacy method, uses updateUser)
+  updateUserRole: async (userId, role) => {
+    try {
+      const response = await api.put(`/users/${userId}`, { role })
+      return response.data
+    } catch (error) {
+      console.error('Error updating user role:', error)
+      throw error
+    }
+  },
+
+  // Delete user
+  deleteUser: async (userId) => {
+    try {
+      await api.delete(`/users/${userId}`)
+      return { success: true }
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      throw error
+    }
+  },
+
+  // Assign projects to user
+  assignProjectsToUser: async (userId, projectIds) => {
+    try {
+      const response = await api.post(`/users/${userId}/assign-projects`, projectIds)
+      return response.data
+    } catch (error) {
+      console.error('Error assigning projects:', error)
+      throw error
+    }
+  },
+
+  // Get user projects
+  getUserProjects: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}/projects`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching user projects:', error)
+      throw error
+    }
+  },
+
+  // ==================== Organization Management API ====================
+  
+  // Create organization
+  createOrganization: async (orgData) => {
+    try {
+      const response = await api.post('/organizations', orgData)
+      return response.data
+    } catch (error) {
+      console.error('Error creating organization:', error)
+      throw error
+    }
+  },
+
+  // Get organizations list
+  getOrganizations: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams()
+      if (filters.subscription_tier) params.append('subscription_tier', filters.subscription_tier)
+      if (filters.subscription_status) params.append('subscription_status', filters.subscription_status)
+      if (filters.skip) params.append('skip', filters.skip)
+      if (filters.limit) params.append('limit', filters.limit)
+      
+      const response = await api.get(`/organizations?${params.toString()}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching organizations:', error)
+      throw error
+    }
+  },
+
+  // Get organization by ID
+  getOrganization: async (organizationId) => {
+    try {
+      const response = await api.get(`/organizations/${organizationId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching organization:', error)
+      throw error
+    }
+  },
+
+  // Update organization
+  updateOrganization: async (organizationId, data) => {
+    try {
+      const response = await api.put(`/organizations/${organizationId}`, data)
+      return response.data
+    } catch (error) {
+      console.error('Error updating organization:', error)
+      throw error
+    }
+  },
+
+  // Delete organization
+  deleteOrganization: async (organizationId) => {
+    try {
+      await api.delete(`/organizations/${organizationId}`)
+      return { success: true }
+    } catch (error) {
+      console.error('Error deleting organization:', error)
+      throw error
+    }
+  },
+
+  // Get organization stats
+  getOrganizationStats: async (organizationId) => {
+    try {
+      const response = await api.get(`/organizations/${organizationId}/stats`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching organization stats:', error)
+      throw error
+    }
+  },
+
+  // Get organization users
+  getOrganizationUsers: async (organizationId, skip = 0, limit = 50) => {
+    try {
+      const response = await api.get(`/organizations/${organizationId}/users?skip=${skip}&limit=${limit}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching organization users:', error)
+      throw error
+    }
+  },
+
+  // ==================== Subscription API ====================
+  
+  // Create subscription
+  createSubscription: async (subscriptionData) => {
+    try {
+      const response = await api.post('/subscriptions', subscriptionData)
+      return response.data
+    } catch (error) {
+      console.error('Error creating subscription:', error)
+      throw error
+    }
+  },
+
+  // Get subscriptions list
+  getSubscriptions: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams()
+      if (filters.organization_id) params.append('organization_id', filters.organization_id)
+      if (filters.tier) params.append('tier', filters.tier)
+      if (filters.status) params.append('status', filters.status)
+      if (filters.skip) params.append('skip', filters.skip)
+      if (filters.limit) params.append('limit', filters.limit)
+      
+      const response = await api.get(`/subscriptions?${params.toString()}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching subscriptions:', error)
+      throw error
+    }
+  },
+
+  // Get subscription by ID
+  getSubscription: async (subscriptionId) => {
+    try {
+      const response = await api.get(`/subscriptions/${subscriptionId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching subscription:', error)
+      throw error
+    }
+  },
+
+  // Update subscription
+  updateSubscription: async (subscriptionId, data) => {
+    try {
+      const response = await api.put(`/subscriptions/${subscriptionId}`, data)
+      return response.data
+    } catch (error) {
+      console.error('Error updating subscription:', error)
+      throw error
+    }
+  },
+
+  // Cancel subscription
+  cancelSubscription: async (subscriptionId) => {
+    try {
+      const response = await api.post(`/subscriptions/${subscriptionId}/cancel`)
+      return response.data
+    } catch (error) {
+      console.error('Error cancelling subscription:', error)
+      throw error
+    }
+  },
+
+  // Get subscription features
+  getSubscriptionFeatures: async (subscriptionId) => {
+    try {
+      const response = await api.get(`/subscriptions/${subscriptionId}/features`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching subscription features:', error)
+      throw error
+    }
+  },
+
+  // Get organization subscription
+  getOrganizationSubscription: async (organizationId) => {
+    try {
+      const response = await api.get(`/subscriptions/organization/${organizationId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching organization subscription:', error)
+      throw error
+    }
+  },
+
+  // ==================== Super Admin API ====================
+  
+  // Get all organizations (Super Admin only) - alias for getOrganizations
+  getAllOrganizations: async () => {
+    try {
+      const response = await api.get('/organizations')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching organizations:', error)
+      throw error
+    }
+  },
+
+  // Get platform stats (Super Admin only)
+  getPlatformStats: async () => {
+    try {
+      // This endpoint might need to be created on backend or use aggregated org stats
+      const response = await api.get('/organizations')
+      // Calculate stats from organizations
+      const orgs = Array.isArray(response.data) ? response.data : []
+      const stats = {
+        totalOrganizations: orgs.length,
+        totalUsers: orgs.reduce((sum, org) => sum + (org.current_users || 0), 0),
+        activeSubscriptions: orgs.filter(org => org.subscription_status === 'active').length,
+        revenue: orgs.reduce((sum, org) => {
+          const tierPrices = { basic: 29, professional: 99, enterprise: 299 }
+          return sum + (tierPrices[org.subscription_tier] || 0)
+        }, 0)
+      }
+      return stats
+    } catch (error) {
+      console.error('Error fetching platform stats:', error)
       throw error
     }
   },
