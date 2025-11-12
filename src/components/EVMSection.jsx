@@ -37,7 +37,7 @@ function EVMSection({ data }) {
       <div className="evm-chart-container">
         <h3 className="chart-title">Cumulative Cost & Value (in Billions PKR)</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 60, bottom: 65 }}>
+          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 85, bottom: 65 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
             <XAxis 
               dataKey="month" 
@@ -46,11 +46,17 @@ function EVMSection({ data }) {
             />
             <YAxis 
               stroke="#666"
-              label={{ value: 'Billions PKR', angle: -90, position: 'insideLeft', offset: 10, style: { textAnchor: 'middle' } }}
+              label={{ 
+                value: 'Billions PKR', 
+                angle: -90, 
+                position: 'insideLeft', 
+                offset: -10,
+                style: { textAnchor: 'middle', fontSize: 12 } 
+              }}
               domain={[0, 'dataMax + 0.2']}
               tickFormatter={(value) => `₨${parseFloat(value.toFixed(2))}B`}
-              tick={{ fontSize: 12 }}
-              width={60}
+              tick={{ fontSize: 11 }}
+              width={75}
             />
             <Tooltip 
               formatter={(value, name) => {
