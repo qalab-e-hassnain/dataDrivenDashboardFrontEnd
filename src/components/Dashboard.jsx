@@ -23,16 +23,16 @@ import {
 import './Dashboard.css'
 
 function Dashboard() {
-  // Default to a sample project ID to prevent infinite loading
-  const [projectId, setProjectId] = useState('690df6a30b3253c94d959c05')
+  // No default project - user must select one
+  const [projectId, setProjectId] = useState(null)
   const [dashboardData, setDashboardData] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
   const [toasts, setToasts] = useState([])
 
   useEffect(() => {
-    // Always fetch data when projectId changes
+    // Only fetch data when projectId changes and is not null
     if (projectId) {
       console.log('Fetching data for project:', projectId)
       fetchDashboardData()
