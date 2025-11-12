@@ -337,7 +337,7 @@ function Dashboard() {
       setLoading(true)
       setDashboardData(null)
       setError(null)
-      addToast(`Loading project data...`, 'info')
+      // Don't show loading toast - the loading skeleton will indicate loading state
       setProjectId(newProjectId)
       // The useEffect will automatically trigger data fetch when projectId changes
     }
