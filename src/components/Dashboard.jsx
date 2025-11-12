@@ -347,6 +347,31 @@ function Dashboard() {
     fetchDashboardData(true)
   }
 
+  // Show empty state when no project is selected
+  if (!projectId) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-container">
+          <Header 
+            projectId={projectId} 
+            onProjectChange={handleProjectChange}
+            onRefresh={handleRefresh}
+            refreshing={false}
+            onUploadSuccess={(message, type) => addToast(message, type)}
+          />
+          <div className="dashboard-content">
+            <div className="no-project-selected">
+              <div className="no-project-icon">📊</div>
+              <h2>Welcome to the Project Dashboard</h2>
+              <p>Please select a project from the dropdown above to view its data and analytics.</p>
+            </div>
+          </div>
+        </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="dashboard">
