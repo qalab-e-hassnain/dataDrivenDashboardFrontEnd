@@ -23,6 +23,24 @@ function InventoryManagement({ data }) {
         <button className="add-button">+</button>
       </div>
 
+      <div className="stock-legend">
+        <span className="legend-title">Stock Levels:</span>
+        <div className="legend-items">
+          <div className="legend-item">
+            <span className="legend-indicator status-low"></span>
+            <span className="legend-label">Low Stock</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-indicator status-moderate"></span>
+            <span className="legend-label">Moderate</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-indicator status-adequate"></span>
+            <span className="legend-label">Adequate</span>
+          </div>
+        </div>
+      </div>
+
       <div className="inventory-list">
         {data.map((item, index) => (
           <div key={index} className="inventory-item">

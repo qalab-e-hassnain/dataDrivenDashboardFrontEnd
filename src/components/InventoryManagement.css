@@ -60,6 +60,49 @@
   transform: scale(1.1);
 }
 
+.stock-legend {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+  border: 1px solid #e5e7eb;
+}
+
+.legend-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.legend-items {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-indicator {
+  width: 24px;
+  height: 16px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
 .inventory-list {
   display: flex;
   flex-direction: column;
