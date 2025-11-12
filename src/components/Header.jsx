@@ -91,16 +91,8 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
         setProjects(normalizedProjects)
         setProjectsError(null)
         
-        // If no project is selected or selected project doesn't exist, select the first one
-        const currentProjectExists = projectId && normalizedProjects.some(p => p.id === projectId)
-        if (!projectId || !currentProjectExists) {
-          if (normalizedProjects[0]?.id) {
-            console.log('Selecting first project:', normalizedProjects[0])
-            onProjectChange(normalizedProjects[0].id)
-            setSelectedProjectName(normalizedProjects[0].name || normalizedProjects[0].id)
-          }
-        } else {
-          // Update project name if project is already selected
+        // Only update project name if a project is already selected (don't auto-select)
+        if (projectId) {
           const currentProject = normalizedProjects.find(p => p.id === projectId)
           if (currentProject) {
             setSelectedProjectName(currentProject.name || currentProject.id)
