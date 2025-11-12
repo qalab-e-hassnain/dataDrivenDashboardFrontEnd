@@ -336,6 +336,9 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
                 <option value="">Loading projects...</option>
               ) : projects.length > 0 ? (
                 <>
+                  <option value="" disabled>
+                    📋 Select a project...
+                  </option>
                   {projects.map((project) => {
                     const projectIdValue = project.id || project._id
                     const projectName = project.name || project.title || project.project_name || projectIdValue
@@ -348,7 +351,7 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
                 </>
               ) : (
                 <>
-                  <option value={projectId || ''} disabled>
+                  <option value="" disabled>
                     {projectsError ? 'Error loading projects' : 'No projects available'}
                   </option>
                   {projectId && (
