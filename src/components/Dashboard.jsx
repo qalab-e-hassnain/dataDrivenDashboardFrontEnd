@@ -5,8 +5,8 @@ import EVMSection from './EVMSection'
 import WorkforceAnalytics from './WorkforceAnalytics'
 import InventoryManagement from './InventoryManagement'
 import AIForecasting from './AIForecasting'
+import AIAnalytics from './AIAnalytics'
 import ProjectTimeline from './ProjectTimeline'
-import AIAlerts from './AIAlerts'
 import ExportActions from './ExportActions'
 import ToastContainer from './ToastContainer'
 import { KPISkeleton, CardSkeleton, ChartSkeleton } from './LoadingSkeleton'
@@ -448,7 +448,7 @@ function Dashboard() {
               <ProjectTimeline data={dashboardData?.timeline} />
             </div>
             <div className="top-right">
-              <AIAlerts data={dashboardData?.alerts} />
+              <AIAnalytics projectId={projectId} />
             </div>
           </div>
 

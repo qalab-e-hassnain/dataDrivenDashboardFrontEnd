@@ -615,6 +615,43 @@ export const apiService = {
       throw error
     }
   },
+
+  // ===== AI RECOMMENDATIONS API =====
+  
+  // Get AI recommendations for a project (with mode: standard or ai)
+  getRecommendations: async (projectId, mode = 'ai') => {
+    try {
+      const response = await api.get(`/recommendations/project/${projectId}`, {
+        params: { mode }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching recommendations:', error)
+      throw error
+    }
+  },
+
+  // Get project insights with health score
+  getProjectInsights: async (projectId) => {
+    try {
+      const response = await api.get(`/recommendations/project/${projectId}/insights`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching project insights:', error)
+      throw error
+    }
+  },
+
+  // Get action plan (timeline-based recommendations)
+  getActionPlan: async (projectId) => {
+    try {
+      const response = await api.get(`/recommendations/project/${projectId}/action-plan`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching action plan:', error)
+      throw error
+    }
+  },
 }
 
 export default api

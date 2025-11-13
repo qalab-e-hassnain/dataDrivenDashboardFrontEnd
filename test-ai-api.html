@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI API Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1f2937;
+            margin: 0 0 10px 0;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin: 0 0 30px 0;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        input:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+        button {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .result.success {
+            background: #ecfdf5;
+            border-color: #10b981;
+        }
+        .result.error {
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+        .result h3 {
+            margin: 0 0 15px 0;
+            color: #1f2937;
+        }
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .error-text {
+            color: #ef4444;
+            font-weight: 600;
+        }
+        .success-text {
+            color: #10b981;
+            font-weight: 600;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-left: 10px;
+        }
+        .status.loading {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Recommendations API Tester</h1>
+        <p class="subtitle">Test your backend AI recommendation endpoints</p>
+
+        <div class="input-group">
+            <label>API Base URL:</label>
+            <input type="text" id="apiUrl" value="http://localhost:8000/api" placeholder="http://localhost:8000/api">
+        </div>
+
+        <div class="input-group">
+            <label>Project ID:</label>
+            <input type="text" id="projectId" value="1" placeholder="Enter project ID">
+        </div>
+
+        <div class="button-group">
+            <button onclick="testRecommendations()">
+                💡 Test Recommendations
+            </button>
+            <button onclick="testInsights()">
+                📊 Test Insights
+            </button>
+            <button onclick="testActionPlan()">
+                🎯 Test Action Plan
+            </button>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function showLoading(endpoint) {
+            const result = document.getElementById('result');
+            result.className = 'result';
+            result.innerHTML = `
+                <h3>Testing: ${endpoint} <span class="status loading">LOADING...</span></h3>
+                <p>Waiting for response...</p>
+            `;
+        }
+
+        function showSuccess(endpoint, data, duration) {
+            const result = document.getElementById('result');
+            result.className = 'result success';
+            result.innerHTML = `
+                <h3>✅ ${endpoint} <span class="status success">SUCCESS</span></h3>
+                <p class="success-text">Response received in ${duration}ms</p>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+        }
+
+        function showError(endpoint, error, duration) {
+            const result = document.getElementById('result');
+            result.className = 'result error';
+            result.innerHTML = `
+                <h3>❌ ${endpoint} <span class="status error">FAILED</span></h3>
+                <p class="error-text">Error after ${duration}ms: ${error.message}</p>
+                <pre>${JSON.stringify({
+                    message: error.message,
+                    status: error.response?.status,
+                    statusText: error.response?.statusText,
+                    data: error.response?.data
+                }, null, 2)}</pre>
+            `;
+        }
+
+        async function testRecommendations() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const projectId = document.getElementById('projectId').value;
+            const endpoint = `/recommendations/project/${projectId}?mode=ai`;
+            
+            showLoading(endpoint);
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(`${apiUrl}${endpoint}`);
+                const duration = Date.now() - startTime;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                showSuccess(endpoint, data, duration);
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                showError(endpoint, error, duration);
+            }
+        }
+
+        async function testInsights() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const projectId = document.getElementById('projectId').value;
+            const endpoint = `/recommendations/project/${projectId}/insights`;
+            
+            showLoading(endpoint);
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(`${apiUrl}${endpoint}`);
+                const duration = Date.now() - startTime;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                showSuccess(endpoint, data, duration);
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                showError(endpoint, error, duration);
+            }
+        }
+
+        async function testActionPlan() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const projectId = document.getElementById('projectId').value;
+            const endpoint = `/recommendations/project/${projectId}/action-plan`;
+            
+            showLoading(endpoint);
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(`${apiUrl}${endpoint}`);
+                const duration = Date.now() - startTime;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                showSuccess(endpoint, data, duration);
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                showError(endpoint, error, duration);
+            }
+        }
+    </script>
+</body>
+</html>
+

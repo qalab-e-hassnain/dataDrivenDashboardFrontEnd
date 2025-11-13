@@ -108,6 +108,11 @@
   margin-top: 10px;
 }
 
+.ai-analytics-full-section {
+  margin-bottom: 30px;
+  width: 100%;
+}
+
 .no-project-message {
   display: flex;
   justify-content: center;
@@ -128,5 +133,9 @@
   
   .bottom-section {
     grid-template-columns: 1fr;
+  }
+
+  .ai-analytics-full-section {
+    padding: 0 10px;
   }
 }
