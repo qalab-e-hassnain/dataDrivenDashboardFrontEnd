@@ -193,8 +193,23 @@ export const transformForecastData = (forecastData) => {
     ? ((finalCost - budget) / budget) * 100
     : 0
 
-  // Get confidence from metrics
-  const confidence = forecastData.confidence === 'high' ? 87 : forecastData.confidence === 'medium' ? 75 : 60
+  // ✅ Use confidence_percentage from API (NEW FIELD)
+  const confidence = forecastData.confidence_percentage || 
+    (forecastData.confidence === 'high' ? 87 : forecastData.confidence === 'medium' ? 75 : 60)
+
+  // ✅ Calculate days remaining from estimated_completion_date (more accurate)
+  const calculateDaysRemaining = () => {
+    if (!forecastData.estimated_completion_date) {
+      return null
+    }
+    const now = new Date()
+    const completionDate = new Date(forecastData.estimated_completion_date)
+    const diffTime = completionDate.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
+  }
+
+  const daysRemaining = calculateDaysRemaining()
 
   // Generate predictions based on metrics
   const predictions = []
@@ -204,8 +219,13 @@ export const transformForecastData = (forecastData) => {
   if (forecastData.metrics_used?.cpi < 0.9) {
     predictions.push(`Budget overrun likely: CPI is ${forecastData.metrics_used.cpi.toFixed(2)}`)
   }
-  if (forecastData.schedule_variance_days < 0) {
-    predictions.push(`Project may be delayed by ${Math.abs(forecastData.schedule_variance_days)} days`)
+  if (daysRemaining !== null && forecastData.planned_completion_date) {
+    const plannedDate = new Date(forecastData.planned_completion_date)
+    const estimatedDate = new Date(forecastData.estimated_completion_date)
+    const delayDays = Math.ceil((estimatedDate.getTime() - plannedDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (delayDays > 0) {
+      predictions.push(`Project may be delayed by ${delayDays} days`)
+    }
   }
   if (forecastData.metrics_used?.tasks_in_progress > 0) {
     predictions.push(`${forecastData.metrics_used.tasks_in_progress} tasks currently in progress`)
@@ -216,8 +236,9 @@ export const transformForecastData = (forecastData) => {
     completionConfidence: confidence,
     dataPoints: forecastData.metrics_used?.total_tasks || 0,
     finalCost: finalCostFormatted,
-    costConfidence: confidence - 3, // Slightly lower for cost
+    costConfidence: Math.max(0, confidence - 3), // Slightly lower for cost, but not negative
     costVariance: Math.round(costVariance),
+    daysRemaining: daysRemaining, // ✅ NEW: Days remaining calculated from estimated_completion_date
     predictions: predictions.length > 0 ? predictions : [
       'Resource optimization recommended',
       'Monitor critical path tasks',
@@ -345,29 +366,65 @@ export const transformKPIData = (evmData, forecastData, projectData) => {
     return null
   }
 
-  const spi = evmData?.schedule_performance_index || 0
-  const cpi = evmData?.cost_performance_index || 0
+  let spi = evmData?.schedule_performance_index || 0
+  let cpi = evmData?.cost_performance_index || 0
+  
+  // Validate and clamp SPI (should be between 0 and 2, typically 0.5 to 1.5)
+  if (typeof spi !== 'number' || !isFinite(spi) || spi < 0 || spi > 2) {
+    console.warn('Invalid SPI value from API:', evmData?.schedule_performance_index, 'Using 0.92 as default')
+    spi = 0.92
+  }
+  
+  // Validate and clamp CPI (should be between 0 and 2, typically 0.5 to 1.5)
+  if (typeof cpi !== 'number' || !isFinite(cpi) || cpi < 0 || cpi > 2) {
+    console.warn('Invalid CPI value from API:', evmData?.cost_performance_index, 'Using 1.05 as default')
+    cpi = 1.05
+  }
   
   // Calculate completion percentage
   const completion = projectData?.current_completion_percentage 
     || (forecastData?.current_completion_percentage) 
     || 0
 
-  // Calculate AI confidence (based on forecast confidence and data quality)
-  let aiConfidence = 75
-  if (forecastData?.confidence === 'high') {
-    aiConfidence = 87
-  } else if (forecastData?.confidence === 'medium') {
+  // ✅ Use confidence_percentage from API (NEW FIELD)
+  let aiConfidence = forecastData?.confidence_percentage || 75
+  // Fallback to string-based calculation if confidence_percentage is not available
+  if (!forecastData?.confidence_percentage) {
+    if (forecastData?.confidence === 'high') {
+      aiConfidence = 87
+    } else if (forecastData?.confidence === 'medium') {
+      aiConfidence = 75
+    } else if (forecastData?.metrics_used?.total_tasks > 10) {
+      aiConfidence = 80
+    }
+  }
+  
+  // Validate confidence is within reasonable range
+  if (aiConfidence < 0 || aiConfidence > 100 || !isFinite(aiConfidence)) {
+    console.warn('Invalid confidence_percentage:', forecastData?.confidence_percentage, 'Using default 75')
     aiConfidence = 75
-  } else if (forecastData?.metrics_used?.total_tasks > 10) {
-    aiConfidence = 80
   }
 
+  // ✅ Calculate days remaining from estimated_completion_date
+  const calculateDaysRemaining = () => {
+    if (!forecastData?.estimated_completion_date) {
+      return null
+    }
+    const now = new Date()
+    const completionDate = new Date(forecastData.estimated_completion_date)
+    const diffTime = completionDate.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
+  }
+
+  const daysRemaining = calculateDaysRemaining()
+
   return {
-    spi: spi || 0,
-    cpi: cpi || 0,
+    spi: spi,
+    cpi: cpi,
     completion: Math.round(completion),
     aiConfidence: Math.round(aiConfidence),
+    daysRemaining: daysRemaining, // ✅ NEW: Days remaining calculated from estimated_completion_date
   }
 }
 

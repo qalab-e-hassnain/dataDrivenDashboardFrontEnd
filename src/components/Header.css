@@ -157,6 +157,34 @@
   border-top-color: #1f2937;
 }
 
+.create-project-button {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.create-project-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.create-project-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .upload-button-wrapper {
   position: relative;
   display: flex;
@@ -234,6 +262,11 @@
     align-items: flex-start;
     width: 100%;
     gap: 10px;
+  }
+
+  .create-project-button {
+    width: 100%;
+    justify-content: center;
   }
 
   .upload-button-wrapper {

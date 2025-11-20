@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { apiService } from '../services/api'
+import CreateProjectModal from './CreateProjectModal'
 import './Header.css'
 
 function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onUploadSuccess }) {
@@ -9,6 +10,7 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
   const [projectsError, setProjectsError] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -165,6 +167,24 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
     // Trigger file input click
     if (fileInputRef.current) {
       fileInputRef.current.click()
+    }
+  }
+
+  const handleCreateProject = () => {
+    setIsCreateModalOpen(true)
+  }
+
+  const handleProjectCreated = async (newProject) => {
+    // Refresh projects list
+    await fetchProjects(false)
+    
+    // Optionally select the newly created project
+    const projectId = newProject.id || newProject._id || newProject.project_id
+    if (projectId && onProjectChange) {
+      // Small delay to ensure projects list is updated
+      setTimeout(() => {
+        onProjectChange(projectId)
+      }, 500)
     }
   }
 
@@ -361,6 +381,14 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
               <div className="projects-error-message">{projectsError}</div>
             </div>
           )}
+          <button 
+            className="create-project-button"
+            onClick={handleCreateProject}
+            disabled={loadingProjects}
+            title="Create a new project"
+          >
+            ➕ Create Project
+          </button>
           <div className="upload-button-wrapper">
             <input
               ref={fileInputRef}
@@ -381,6 +409,13 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
           </div>
         </div>
       </div>
+      
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onProjectCreated={handleProjectCreated}
+        onUploadSuccess={onUploadSuccess}
+      />
     </div>
   )
 }

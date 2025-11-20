@@ -13,7 +13,6 @@ function AIForecasting({ data }) {
           <span className="section-icon">🧠</span>
           <h2 className="section-title">AI Forecasting & Predictions</h2>
         </div>
-        <span className="ml-tag">MACHINE LEARNING</span>
       </div>
 
       <div className="forecast-cards">

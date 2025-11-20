@@ -20,7 +20,6 @@ function InventoryManagement({ data }) {
           <span className="section-icon">📦</span>
           <h2 className="section-title">Inventory Management</h2>
         </div>
-        <button className="add-button">+</button>
       </div>
 
       <div className="stock-legend">

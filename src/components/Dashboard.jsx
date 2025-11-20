@@ -445,7 +445,11 @@ function Dashboard() {
           {/* Top Section: Project Timeline & AI Alerts */}
           <div className="top-section">
             <div className="top-left">
-              <ProjectTimeline data={dashboardData?.timeline} />
+              <ProjectTimeline 
+                data={dashboardData?.timeline} 
+                onRefresh={handleRefresh}
+                projectId={projectId}
+              />
             </div>
             <div className="top-right">
               <AIAnalytics projectId={projectId} />

@@ -19,14 +19,6 @@ function ExportActions({ projectId, onExportStart, onExportComplete, onExportErr
       } else if (type === 'PDF') {
         blob = await apiService.exportPDFReport(projectId)
         filename = `dashboard-report-${Date.now()}.pdf`
-      } else if (type === 'Email') {
-        // For email, we might need a different endpoint or implementation
-        // For now, show a message
-        if (onExportComplete) {
-          onExportComplete(type, 'Email functionality will be implemented in the API')
-        }
-        setExporting(null)
-        return
       }
 
       // Create download link for Excel and PDF
@@ -70,13 +62,6 @@ function ExportActions({ projectId, onExportStart, onExportComplete, onExportErr
         disabled={exporting !== null}
       >
         📄 {exporting === 'PDF' ? 'Generating...' : 'Generate PDF Report'}
-      </button>
-      <button 
-        className={`export-button ${exporting === 'Email' ? 'exporting' : ''}`}
-        onClick={() => handleExport('Email')}
-        disabled={exporting !== null}
-      >
-        📧 {exporting === 'Email' ? 'Sending...' : 'Email Summary'}
       </button>
     </div>
   )

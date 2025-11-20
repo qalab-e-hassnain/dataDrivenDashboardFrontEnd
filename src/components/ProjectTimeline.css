@@ -16,16 +16,23 @@
   margin-bottom: 20px;
   padding-bottom: 15px;
   border-bottom: 2px solid #f3f4f6;
+  flex-wrap: nowrap;
+  gap: 15px;
 }
 
 .section-title-wrapper {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .section-icon {
-  font-size: 20px;
+  width: 24px;
+  height: 24px;
+  color: #667eea;
+  flex-shrink: 0;
 }
 
 .section-title {
@@ -33,12 +40,14 @@
   font-weight: 600;
   color: #1f2937;
   margin: 0;
+  white-space: nowrap;
 }
 
 .timeline-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .ai-enhanced-tag {
@@ -50,6 +59,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .action-button {
@@ -62,14 +73,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
   transition: all 0.2s;
+  color: #374151;
+  padding: 0;
+}
+
+.action-button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .action-button:hover {
   background: #667eea;
   color: white;
   transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.action-button:active {
+  transform: translateY(0);
 }
 
 .timeline-tasks {

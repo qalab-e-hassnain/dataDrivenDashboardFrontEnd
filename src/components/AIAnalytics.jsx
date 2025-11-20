@@ -54,9 +54,29 @@ function AIAnalytics({ projectId }) {
       // Handle insights
       if (insightsData.status === 'fulfilled') {
         console.log('AIAnalytics: Insights data:', insightsData.value)
-        setInsights(insightsData.value)
+        const insightsValue = insightsData.value
+        
+        // Validate response structure
+        if (!insightsValue) {
+          console.warn('AIAnalytics: Insights data is null or undefined')
+          setInsights(null)
+        } else if (!insightsValue.insights || !insightsValue.recommendations_by_priority) {
+          console.warn('AIAnalytics: Invalid insights response structure:', insightsValue)
+          console.warn('AIAnalytics: Expected structure: { insights: {...}, recommendations_by_priority: {...} }')
+          setInsights(null)
+        } else {
+          // Validate counts are present
+          const insightsObj = insightsValue.insights
+          if (typeof insightsObj.critical_count === 'undefined' || 
+              typeof insightsObj.high_priority_count === 'undefined' ||
+              typeof insightsObj.total_issues_identified === 'undefined') {
+            console.warn('AIAnalytics: Missing count fields in insights:', insightsObj)
+          }
+          setInsights(insightsValue)
+        }
       } else {
         console.warn('AIAnalytics: Failed to fetch insights:', insightsData.reason)
+        setInsights(null)
       }
 
       // Handle action plan
