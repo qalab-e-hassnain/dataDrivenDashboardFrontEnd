@@ -81,6 +81,10 @@ function Dashboard() {
           console.warn('Failed to fetch workforce:', err)
           return null
         }),
+        apiService.getWorkforceTrends(projectId).catch((err) => {
+          console.warn('Failed to fetch workforce trends:', err)
+          return null
+        }),
         apiService.getInventoryByProject(projectId).catch((err) => {
           console.warn('Failed to fetch inventory:', err)
           return null
@@ -107,6 +111,7 @@ function Dashboard() {
         projectData,
         evmData,
         workforceData,
+        workforceTrendsData,
         inventoryData,
         forecastData,
         tasksData,
@@ -147,13 +152,39 @@ function Dashboard() {
         console.warn('⚠️ EVM Data is NULL or UNDEFINED!')
       }
 
+      // 🔍 Detailed Workforce Data Logging
+      if (workforceData) {
+        console.log('👷 Workforce Data Summary:', {
+          totalEntries: Array.isArray(workforceData) ? workforceData.length : 0,
+          hasProductivity: Array.isArray(workforceData) && workforceData.some(w => w.productivity_percentage),
+          sampleEntry: Array.isArray(workforceData) && workforceData.length > 0 ? {
+            worker_name: workforceData[0].worker_name,
+            productivity_percentage: workforceData[0].productivity_percentage,
+            utilization_rate: workforceData[0].utilization_rate,
+            entry_date: workforceData[0].entry_date || workforceData[0].date || workforceData[0].created_at,
+          } : null,
+        })
+      }
+
+      // 🔍 Workforce Trends Data Logging
+      if (workforceTrendsData) {
+        console.log('📈 Workforce Trends Data:', {
+          hasDailyTrends: !!workforceTrendsData.daily_trends,
+          dailyTrendsCount: workforceTrendsData.daily_trends?.length || 0,
+          averageProductivity: workforceTrendsData.summary?.average_productivity,
+          sampleTrend: workforceTrendsData.daily_trends?.[0],
+        })
+      } else {
+        console.log('ℹ️ Workforce Trends Data not available (will use date-based grouping from entries)')
+      }
+
       if (hasAnyData) {
         // Transform API data to dashboard format
         const transformedData = {
           project: projectData,
           kpi: transformKPIData(evmData, forecastData, projectData),
           evm: transformEVMMetrics(evmData, projectData),
-          workforce: transformWorkforceData(workforceData),
+          workforce: transformWorkforceData(workforceData, workforceTrendsData), // ✅ Pass trends data
           inventory: transformInventoryData(inventoryData),
           forecasts: transformForecastData(forecastData),
           timeline: transformTasksToTimeline(tasksData),

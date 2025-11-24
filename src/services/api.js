@@ -286,6 +286,17 @@ export const apiService = {
     }
   },
 
+  // Get Workforce Trends (with productivity over time)
+  getWorkforceTrends: async (projectId) => {
+    try {
+      const response = await api.get(`/workforce-analytics/project/${projectId}/trends`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching workforce trends:', error)
+      throw error
+    }
+  },
+
   // ==================== EVM Metrics API ====================
   
   // Get EVM Metrics

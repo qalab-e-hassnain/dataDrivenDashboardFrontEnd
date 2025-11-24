@@ -127,8 +127,9 @@ export const transformEVMMetrics = (evmData, projectData) => {
 
 /**
  * Transform workforce data to dashboard format
+ * Uses actual dates from workforce entries to create proper time-series data
  */
-export const transformWorkforceData = (workforceData) => {
+export const transformWorkforceData = (workforceData, trendsData = null) => {
   if (!workforceData || !Array.isArray(workforceData) || workforceData.length === 0) {
     return null
   }
@@ -152,36 +153,118 @@ export const transformWorkforceData = (workforceData) => {
 
   const avgUtilization = workforceData.reduce((sum, w) => sum + (w.utilization_rate || 0), 0) / workforceData.length
 
-  // Group by week (simplified - you may need to adjust based on actual date grouping)
-  const weeklyData = []
-  const weeks = 7
-  for (let i = 1; i <= weeks; i++) {
-    const weekWorkers = workforceData.filter((w, index) => (index % weeks) === (i - 1))
-    
-    // Use productivity_percentage from API for weekly data
-    const weekProductivity = weekWorkers.length > 0
-      ? weekWorkers
-          .filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined && typeof w.productivity_percentage === 'number' && isFinite(w.productivity_percentage))
-          .reduce((sum, w) => sum + (w.productivity_percentage || 0), 0) / Math.max(1, weekWorkers.filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined).length)
-      : avgProductivity
-
-    const weekUtilization = weekWorkers.length > 0
-      ? weekWorkers.reduce((sum, w) => sum + (w.utilization_rate || 0), 0) / weekWorkers.length
-      : avgUtilization
-
-    weeklyData.push({
-      week: `Week ${i}`,
-      productivity: Math.round(weekProductivity),
-      utilization: Math.round(weekUtilization),
+  // ✅ Use trends API if available (has daily_trends with average_productivity)
+  let timeSeriesData = []
+  
+  if (trendsData && trendsData.daily_trends && Array.isArray(trendsData.daily_trends) && trendsData.daily_trends.length > 0) {
+    // Use trends API data for time-series (most accurate)
+    console.log('📊 Using workforce trends API data for time-series')
+    const firstDate = new Date(trendsData.daily_trends[0].date)
+    timeSeriesData = trendsData.daily_trends.map((trend, index) => {
+      const date = new Date(trend.date)
+      // Calculate week number from first date
+      const daysDiff = Math.floor((date - firstDate) / (1000 * 60 * 60 * 24))
+      const weekNum = Math.floor(daysDiff / 7) + 1
+      
+      return {
+        date: trend.date,
+        week: `Week ${weekNum}`,
+        productivity: Math.round(trend.average_productivity || 0),
+        utilization: Math.round(trend.average_utilization || trend.utilization || 0),
+      }
     })
+  } else {
+    // ✅ Group by actual dates from workforce entries (dates are now spread over timeline)
+    const dateGroups = new Map()
+    
+    workforceData.forEach(entry => {
+      // Use date field (entry_date, date, or created_at)
+      const entryDate = entry.entry_date || entry.date || entry.created_at
+      if (!entryDate) return
+      
+      const dateKey = new Date(entryDate).toISOString().split('T')[0] // YYYY-MM-DD
+      
+      if (!dateGroups.has(dateKey)) {
+        dateGroups.set(dateKey, {
+          date: dateKey,
+          entries: [],
+        })
+      }
+      
+      dateGroups.get(dateKey).entries.push(entry)
+    })
+    
+    // Sort dates chronologically
+    const sortedDates = Array.from(dateGroups.keys()).sort()
+    
+    // Calculate averages for each date
+    timeSeriesData = sortedDates.map((dateKey, index) => {
+      const group = dateGroups.get(dateKey)
+      const entries = group.entries
+      
+      // Calculate average productivity from API productivity_percentage
+      const entriesWithProductivity = entries.filter(e => 
+        e.productivity_percentage !== null && 
+        e.productivity_percentage !== undefined && 
+        typeof e.productivity_percentage === 'number' &&
+        isFinite(e.productivity_percentage)
+      )
+      
+      const dateProductivity = entriesWithProductivity.length > 0
+        ? entriesWithProductivity.reduce((sum, e) => sum + (e.productivity_percentage || 0), 0) / entriesWithProductivity.length
+        : avgProductivity
+      
+      const dateUtilization = entries.length > 0
+        ? entries.reduce((sum, e) => sum + (e.utilization_rate || 0), 0) / entries.length
+        : avgUtilization
+      
+      return {
+        date: dateKey,
+        week: `Week ${Math.floor(index / 7) + 1}`,
+        productivity: Math.round(dateProductivity),
+        utilization: Math.round(dateUtilization),
+      }
+    })
+    
+    // If no dates found, fallback to weekly grouping by index
+    if (timeSeriesData.length === 0) {
+      console.warn('⚠️ No dates found in workforce entries, using fallback weekly grouping')
+      const weeks = 7
+      for (let i = 1; i <= weeks; i++) {
+        const weekWorkers = workforceData.filter((w, index) => (index % weeks) === (i - 1))
+        
+        const weekProductivity = weekWorkers.length > 0
+          ? weekWorkers
+              .filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined && typeof w.productivity_percentage === 'number' && isFinite(w.productivity_percentage))
+              .reduce((sum, w) => sum + (w.productivity_percentage || 0), 0) / Math.max(1, weekWorkers.filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined).length)
+          : avgProductivity
+
+        const weekUtilization = weekWorkers.length > 0
+          ? weekWorkers.reduce((sum, w) => sum + (w.utilization_rate || 0), 0) / weekWorkers.length
+          : avgUtilization
+
+        timeSeriesData.push({
+          week: `Week ${i}`,
+          productivity: Math.round(weekProductivity),
+          utilization: Math.round(weekUtilization),
+        })
+      }
+    }
   }
+
+  console.log('📊 Workforce Time-Series Data:', {
+    totalEntries: workforceData.length,
+    timeSeriesPoints: timeSeriesData.length,
+    hasTrendsData: !!trendsData,
+    avgProductivity: Math.round(avgProductivity),
+  })
 
   return {
     total: totalWorkers,
     active: activeWorkers,
     productivity: Math.round(avgProductivity),
     utilization: Math.round(avgUtilization),
-    weeklyData,
+    weeklyData: timeSeriesData, // Now contains date-based time-series data
     rawData: workforceData,
   }
 }

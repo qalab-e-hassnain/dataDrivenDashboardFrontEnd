@@ -14,9 +14,19 @@ function WorkforceAnalytics({ data }) {
     { label: 'Utilization Rate', value: `${Math.round(data.utilization || 92)}%` },
   ]
 
-  // Ensure we have valid chart data
+  // ✅ Use time-series data (now date-based from API)
+  // Chart data can have either 'week' or 'date' field
   const chartData = data.weeklyData && data.weeklyData.length > 0 
-    ? data.weeklyData 
+    ? data.weeklyData.map(item => ({
+        // Use date if available, otherwise use week
+        label: item.date 
+          ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : item.week || 'Week',
+        week: item.week || item.label || 'Week',
+        date: item.date,
+        productivity: item.productivity || 0,
+        utilization: item.utilization || 0,
+      }))
     : [
         { week: 'Week 1', productivity: 87, utilization: 92 },
         { week: 'Week 2', productivity: 89, utilization: 94 },
@@ -62,9 +72,12 @@ function WorkforceAnalytics({ data }) {
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 60, bottom: 70 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
             <XAxis 
-              dataKey="week" 
+              dataKey="label" 
               stroke="#666"
               tick={{ fontSize: 12 }}
+              angle={-45}
+              textAnchor="end"
+              height={80}
             />
             <YAxis 
               stroke="#666"
