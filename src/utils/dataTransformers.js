@@ -6,57 +6,121 @@
  * Transform EVM metrics to dashboard format
  */
 export const transformEVMMetrics = (evmData, projectData) => {
-  if (!evmData) return null
+  if (!evmData) {
+    console.warn('⚠️ transformEVMMetrics: evmData is null/undefined')
+    return null
+  }
 
-  // Calculate monthly progression (simplified - you may need to adjust based on actual data)
-  const months = []
-  const pv = []
-  const ev = []
-  const ac = []
+  // Debug: Log full EVM data structure
+  console.log('📊 EVM Data from API (Full):', evmData)
+  console.log('📊 EVM Data Summary:', {
+    hasMonthlyProgression: !!evmData.monthly_progression,
+    monthlyProgressionLength: evmData.monthly_progression?.length || 0,
+    planned_value: evmData.planned_value,
+    earned_value: evmData.earned_value,
+    actual_cost: evmData.actual_cost,
+    budget_at_completion: evmData.budget_at_completion,
+    allKeys: Object.keys(evmData),
+  })
 
-  // If we have project start date, calculate months
-  if (projectData?.start_date) {
-    const startDate = new Date(projectData.start_date)
-    const currentDate = new Date()
-    const monthsSinceStart = Math.max(1, Math.ceil((currentDate - startDate) / (1000 * 60 * 60 * 24 * 30)))
-    
-    for (let i = 1; i <= Math.min(monthsSinceStart + 2, 12); i++) {
-      months.push(`Month ${i}`)
-      // Calculate progressive values (simplified)
-      const progress = i / (monthsSinceStart + 2)
-      pv.push((evmData.budget_at_completion || 0) * progress)
-      ev.push((evmData.earned_value || 0) * progress)
-      ac.push((evmData.actual_cost || 0) * progress)
-    }
+  // ✅ Use monthly_progression from API (backend should provide this)
+  let months = []
+  let pv = []
+  let ev = []
+  let ac = []
+
+  if (evmData.monthly_progression && Array.isArray(evmData.monthly_progression) && evmData.monthly_progression.length > 0) {
+    // Use monthly progression data from API (values are cumulative)
+    evmData.monthly_progression.forEach((monthData) => {
+      months.push(monthData.month || monthData.month_name || monthData.label || 'Month')
+      // Convert to millions for display (API values are in base units, e.g., 1,680,000 = 1.68M)
+      pv.push((monthData.planned_value || 0) / 1000000)
+      ev.push((monthData.earned_value || 0) / 1000000)
+      ac.push((monthData.actual_cost || 0) / 1000000)
+    })
   } else {
-    // Default 8 months if no dates
-    for (let i = 1; i <= 8; i++) {
-      months.push(`Month ${i}`)
-      const progress = i / 8
-      pv.push((evmData.budget_at_completion || 0) * progress)
-      ev.push((evmData.earned_value || 0) * progress)
-      ac.push((evmData.actual_cost || 0) * progress)
+    // Fallback: Use current values from API root level to create at least one data point
+    console.warn('⚠️ EVM API: monthly_progression not found, using current values from API')
+    console.log('🔍 Fallback Values:', {
+      planned_value: evmData.planned_value,
+      earned_value: evmData.earned_value,
+      actual_cost: evmData.actual_cost,
+      budget_at_completion: evmData.budget_at_completion,
+    })
+    
+    // Use correct field names from API (snake_case)
+    const pvValue = evmData.planned_value || 0
+    const evValue = evmData.earned_value || 0
+    const acValue = evmData.actual_cost || 0
+    
+    console.log('🔍 Extracted Values (raw):', { pvValue, evValue, acValue })
+    
+    // Convert to millions for display (API values are in base units, e.g., 1,680,000 = 1.68M)
+    const currentPV = pvValue / 1000000
+    const currentEV = evValue / 1000000
+    const currentAC = acValue / 1000000
+    
+    console.log('🔍 Converted to Millions:', { currentPV, currentEV, currentAC })
+    
+    // Create a single data point with current values
+    months.push('Current')
+    pv.push(currentPV)
+    ev.push(currentEV)
+    ac.push(currentAC)
+    
+    // If we have project start date, create progressive months
+    if (projectData?.start_date) {
+      const startDate = new Date(projectData.start_date)
+      const currentDate = new Date()
+      const monthsSinceStart = Math.max(1, Math.ceil((currentDate - startDate) / (1000 * 60 * 60 * 24 * 30)))
+      
+      // Create progressive months leading up to current
+      for (let i = 1; i < Math.min(monthsSinceStart, 8); i++) {
+        months.unshift(`Month ${i}`)
+        const progress = i / monthsSinceStart
+        pv.unshift(currentPV * progress)
+        ev.unshift(currentEV * progress)
+        ac.unshift(currentAC * progress)
+      }
+    } else {
+      // Create a few progressive months if no start date
+      for (let i = 1; i < 4; i++) {
+        months.unshift(`Month ${i}`)
+        const progress = i / 4
+        pv.unshift(currentPV * progress)
+        ev.unshift(currentEV * progress)
+        ac.unshift(currentAC * progress)
+      }
     }
   }
 
+  // ✅ Use correct field names from API (snake_case as per API documentation)
+  const plannedValue = evmData.planned_value || 0
+  const earnedValue = evmData.earned_value || 0
+  const actualCost = evmData.actual_cost || 0
+
+  console.log('🔍 Final Metrics Extracted (raw values):', { plannedValue, earnedValue, actualCost })
+
   return {
     months,
-    pv: pv.map(v => v / 1000000000), // Convert to billions
-    ev: ev.map(v => v / 1000000000),
-    ac: ac.map(v => v / 1000000000),
+    pv,
+    ev,
+    ac,
     metrics: {
-      plannedValue: evmData.planned_value || 0,
-      earnedValue: evmData.earned_value || 0,
-      actualCost: evmData.actual_cost || 0,
-      spi: evmData.schedule_performance_index || 0,
-      cpi: evmData.cost_performance_index || 0,
-      scheduleVariance: evmData.schedule_variance || 0,
-      costVariance: evmData.cost_variance || 0,
-      eac: evmData.estimate_at_completion || 0,
-      etc: evmData.estimate_to_complete || 0,
-      vac: evmData.variance_at_completion || 0,
-      bac: evmData.budget_at_completion || 0,
-      status: evmData.status || 'unknown',
+      plannedValue: plannedValue,
+      earnedValue: earnedValue,
+      actualCost: actualCost,
+      spi: evmData.schedule_performance_index || evmData.spi || evmData.metrics?.schedule_performance_index || 0,
+      cpi: evmData.cost_performance_index || evmData.cpi || evmData.metrics?.cost_performance_index || 0,
+      scheduleVariance: evmData.schedule_variance || evmData.sv || evmData.metrics?.schedule_variance || 0,
+      costVariance: evmData.cost_variance || evmData.cv || evmData.metrics?.cost_variance || 0,
+      scheduleVariancePercentage: evmData.schedule_variance_percentage || evmData.metrics?.schedule_variance_percentage || null, // ✅ From API
+      costVariancePercentage: evmData.cost_variance_percentage || evmData.metrics?.cost_variance_percentage || null, // ✅ From API
+      eac: evmData.estimate_at_completion || evmData.eac || evmData.metrics?.estimate_at_completion || 0,
+      etc: evmData.estimate_to_complete || evmData.etc || evmData.metrics?.estimate_to_complete || 0,
+      vac: evmData.variance_at_completion || evmData.vac || evmData.metrics?.variance_at_completion || 0,
+      bac: evmData.budget_at_completion || evmData.bac || evmData.metrics?.budget_at_completion || 0,
+      status: evmData.status || evmData.metrics?.status || 'unknown',
     },
   }
 }
@@ -73,13 +137,18 @@ export const transformWorkforceData = (workforceData) => {
   const totalWorkers = new Set(workforceData.map(w => w.worker_name)).size
   const activeWorkers = workforceData.filter(w => w.utilization_rate > 0).length
   
-  // Calculate averages
-  const avgProductivity = workforceData.reduce((sum, w) => {
-    const productivity = w.hours_worked && w.hours_planned 
-      ? (w.hours_worked / w.hours_planned) * 100 
-      : 0
-    return sum + productivity
-  }, 0) / workforceData.length
+  // ✅ Use productivity_percentage from API (backend should provide this)
+  // Calculate average productivity from API-provided productivity_percentage
+  const workersWithProductivity = workforceData.filter(w => 
+    w.productivity_percentage !== null && 
+    w.productivity_percentage !== undefined && 
+    typeof w.productivity_percentage === 'number' &&
+    isFinite(w.productivity_percentage)
+  )
+  
+  const avgProductivity = workersWithProductivity.length > 0
+    ? workersWithProductivity.reduce((sum, w) => sum + (w.productivity_percentage || 0), 0) / workersWithProductivity.length
+    : 0
 
   const avgUtilization = workforceData.reduce((sum, w) => sum + (w.utilization_rate || 0), 0) / workforceData.length
 
@@ -88,13 +157,12 @@ export const transformWorkforceData = (workforceData) => {
   const weeks = 7
   for (let i = 1; i <= weeks; i++) {
     const weekWorkers = workforceData.filter((w, index) => (index % weeks) === (i - 1))
+    
+    // Use productivity_percentage from API for weekly data
     const weekProductivity = weekWorkers.length > 0
-      ? weekWorkers.reduce((sum, w) => {
-          const productivity = w.hours_worked && w.hours_planned 
-            ? (w.hours_worked / w.hours_planned) * 100 
-            : 0
-          return sum + productivity
-        }, 0) / weekWorkers.length
+      ? weekWorkers
+          .filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined && typeof w.productivity_percentage === 'number' && isFinite(w.productivity_percentage))
+          .reduce((sum, w) => sum + (w.productivity_percentage || 0), 0) / Math.max(1, weekWorkers.filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined).length)
       : avgProductivity
 
     const weekUtilization = weekWorkers.length > 0
@@ -187,11 +255,13 @@ export const transformForecastData = (forecastData) => {
     ? `Rs${(finalCost / 1000000).toFixed(2)}M`
     : `Rs${finalCost.toLocaleString()}`
 
-  // Calculate cost variance percentage
-  const budget = forecastData.budget || 0
-  const costVariance = budget > 0
-    ? ((finalCost - budget) / budget) * 100
-    : 0
+  // ✅ Use cost_variance_percentage from API (backend should provide this)
+  let costVariance = forecastData.cost_variance_percentage || null
+  // Validate cost variance percentage
+  if (costVariance !== null && (typeof costVariance !== 'number' || !isFinite(costVariance))) {
+    console.warn('Invalid cost_variance_percentage from API:', forecastData.cost_variance_percentage)
+    costVariance = null
+  }
 
   // ✅ Use confidence_percentage from API (NEW FIELD)
   const confidence = forecastData.confidence_percentage || 
@@ -237,8 +307,8 @@ export const transformForecastData = (forecastData) => {
     dataPoints: forecastData.metrics_used?.total_tasks || 0,
     finalCost: finalCostFormatted,
     costConfidence: Math.max(0, confidence - 3), // Slightly lower for cost, but not negative
-    costVariance: Math.round(costVariance),
-    daysRemaining: daysRemaining, // ✅ NEW: Days remaining calculated from estimated_completion_date
+    costVariance: costVariance !== null ? Math.round(costVariance) : null, // ✅ From API
+    daysRemaining: daysRemaining, // ✅ Days remaining calculated from estimated_completion_date
     predictions: predictions.length > 0 ? predictions : [
       'Resource optimization recommended',
       'Monitor critical path tasks',
@@ -419,12 +489,29 @@ export const transformKPIData = (evmData, forecastData, projectData) => {
 
   const daysRemaining = calculateDaysRemaining()
 
+  // ✅ Use schedule_variance_percentage and cost_variance_percentage from API
+  let scheduleVariancePercentage = evmData?.schedule_variance_percentage ?? null
+  let costVariancePercentage = evmData?.cost_variance_percentage ?? null
+  
+  // Validate variance percentages
+  if (scheduleVariancePercentage !== null && (typeof scheduleVariancePercentage !== 'number' || !isFinite(scheduleVariancePercentage))) {
+    console.warn('Invalid schedule_variance_percentage from API:', evmData?.schedule_variance_percentage)
+    scheduleVariancePercentage = null
+  }
+  
+  if (costVariancePercentage !== null && (typeof costVariancePercentage !== 'number' || !isFinite(costVariancePercentage))) {
+    console.warn('Invalid cost_variance_percentage from API:', evmData?.cost_variance_percentage)
+    costVariancePercentage = null
+  }
+
   return {
     spi: spi,
     cpi: cpi,
     completion: Math.round(completion),
     aiConfidence: Math.round(aiConfidence),
-    daysRemaining: daysRemaining, // ✅ NEW: Days remaining calculated from estimated_completion_date
+    daysRemaining: daysRemaining, // ✅ Days remaining calculated from estimated_completion_date
+    scheduleVariancePercentage: scheduleVariancePercentage, // ✅ From API
+    costVariancePercentage: costVariancePercentage, // ✅ From API
   }
 }
 

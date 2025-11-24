@@ -132,6 +132,21 @@ function Dashboard() {
         hasAnyData,
       })
 
+      // 🔍 Detailed EVM Data Logging
+      if (evmData) {
+        console.log('🔍 Raw EVM Data from API:', JSON.stringify(evmData, null, 2))
+        console.log('🔍 EVM Data Keys:', Object.keys(evmData))
+        console.log('🔍 EVM Values:', {
+          planned_value: evmData.planned_value,
+          earned_value: evmData.earned_value,
+          actual_cost: evmData.actual_cost,
+          budget_at_completion: evmData.budget_at_completion,
+          monthly_progression: evmData.monthly_progression,
+        })
+      } else {
+        console.warn('⚠️ EVM Data is NULL or UNDEFINED!')
+      }
+
       if (hasAnyData) {
         // Transform API data to dashboard format
         const transformedData = {

@@ -14,15 +14,24 @@ function EVMSection({ data }) {
     'Actual Cost (AC)': data.ac[index],
   }))
 
-  // Round values to 2 decimal places
-  const pv = typeof data.pv[data.pv.length - 1] === 'number' 
-    ? parseFloat(data.pv[data.pv.length - 1].toFixed(2)) 
+  // ✅ Use actual values from metrics (from API root level) for summary cards
+  // Convert to millions (API values are in base units, e.g., 1,680,000 = 1.68M)
+  const pv = data.metrics?.plannedValue 
+    ? parseFloat((data.metrics.plannedValue / 1000000).toFixed(2))
+    : (data.pv && data.pv.length > 0 && typeof data.pv[data.pv.length - 1] === 'number')
+    ? parseFloat(data.pv[data.pv.length - 1].toFixed(2))
     : 0
-  const ev = typeof data.ev[data.ev.length - 1] === 'number' 
-    ? parseFloat(data.ev[data.ev.length - 1].toFixed(2)) 
+    
+  const ev = data.metrics?.earnedValue
+    ? parseFloat((data.metrics.earnedValue / 1000000).toFixed(2))
+    : (data.ev && data.ev.length > 0 && typeof data.ev[data.ev.length - 1] === 'number')
+    ? parseFloat(data.ev[data.ev.length - 1].toFixed(2))
     : 0
-  const ac = typeof data.ac[data.ac.length - 1] === 'number' 
-    ? parseFloat(data.ac[data.ac.length - 1].toFixed(2)) 
+    
+  const ac = data.metrics?.actualCost
+    ? parseFloat((data.metrics.actualCost / 1000000).toFixed(2))
+    : (data.ac && data.ac.length > 0 && typeof data.ac[data.ac.length - 1] === 'number')
+    ? parseFloat(data.ac[data.ac.length - 1].toFixed(2))
     : 0
 
   return (
@@ -35,7 +44,7 @@ function EVMSection({ data }) {
       </div>
       
       <div className="evm-chart-container">
-        <h3 className="chart-title">Cumulative Cost & Value (in Billions PKR)</h3>
+        <h3 className="chart-title">Cumulative Cost & Value (in Millions PKR)</h3>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 10, right: 30, left: 85, bottom: 65 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
@@ -47,14 +56,14 @@ function EVMSection({ data }) {
             <YAxis 
               stroke="#666"
               label={{ 
-                value: 'Billions PKR', 
+                value: 'Millions PKR', 
                 angle: -90, 
                 position: 'insideLeft', 
                 offset: -10,
                 style: { textAnchor: 'middle', fontSize: 12 } 
               }}
               domain={[0, 'dataMax + 0.2']}
-              tickFormatter={(value) => `₨${parseFloat(value.toFixed(2))}B`}
+              tickFormatter={(value) => `₨${parseFloat(value.toFixed(2))}M`}
               tick={{ fontSize: 11 }}
               width={75}
             />
@@ -62,7 +71,7 @@ function EVMSection({ data }) {
               formatter={(value, name) => {
                 if (typeof value === 'number') {
                   const formattedValue = parseFloat(value.toFixed(2))
-                  return [`₨${formattedValue}B`, name]
+                  return [`₨${formattedValue}M`, name]
                 }
                 return [value, name]
               }}
@@ -107,15 +116,15 @@ function EVMSection({ data }) {
       <div className="evm-summary-cards">
         <div className="evm-summary-card pv-card">
           <div className="evm-summary-label">Planned Value (PV)</div>
-          <div className="evm-summary-value">₨{pv}B</div>
+          <div className="evm-summary-value">₨{pv}M</div>
         </div>
         <div className="evm-summary-card ev-card">
           <div className="evm-summary-label">Earned Value (EV)</div>
-          <div className="evm-summary-value">₨{ev}B</div>
+          <div className="evm-summary-value">₨{ev}M</div>
         </div>
         <div className="evm-summary-card ac-card">
           <div className="evm-summary-label">Actual Cost (AC)</div>
-          <div className="evm-summary-value">₨{ac}B</div>
+          <div className="evm-summary-value">₨{ac}M</div>
         </div>
       </div>
     </div>

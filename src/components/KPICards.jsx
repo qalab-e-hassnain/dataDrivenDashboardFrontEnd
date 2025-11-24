@@ -24,15 +24,37 @@ function KPICards({ data }) {
   const completion = Math.round(data.completion || 68)
   const aiConfidence = Math.round(data.aiConfidence || 87)
 
-  // Calculate schedule variance percentage safely
-  const scheduleVariancePercent = spi < 1 
-    ? Math.max(0, Math.min(100, Math.round((1 - spi) * 100))) // Clamp between 0-100%
-    : 0
+  // ✅ Use schedule_variance_percentage from API (backend should provide this)
+  let scheduleVariancePercent = data.scheduleVariancePercentage
+  // Validate and clamp schedule variance percentage
+  if (scheduleVariancePercent === null || scheduleVariancePercent === undefined) {
+    // Fallback: Calculate from SPI if API doesn't provide it (for backward compatibility)
+    scheduleVariancePercent = spi < 1 
+      ? Math.max(0, Math.min(100, Math.round((1 - spi) * 100)))
+      : 0
+  } else if (typeof scheduleVariancePercent !== 'number' || !isFinite(scheduleVariancePercent)) {
+    console.warn('Invalid scheduleVariancePercentage:', data.scheduleVariancePercentage, 'Using fallback')
+    scheduleVariancePercent = spi < 1 ? Math.max(0, Math.min(100, Math.round((1 - spi) * 100))) : 0
+  } else {
+    // Clamp to 0-100% range for safety
+    scheduleVariancePercent = Math.max(0, Math.min(100, Math.round(scheduleVariancePercent)))
+  }
 
-  // Calculate cost variance percentage safely
-  const costVariancePercent = cpi > 1
-    ? Math.max(0, Math.min(100, Math.round((cpi - 1) * 100))) // Clamp between 0-100%
-    : 0
+  // ✅ Use cost_variance_percentage from API (backend should provide this)
+  let costVariancePercent = data.costVariancePercentage
+  // Validate and clamp cost variance percentage
+  if (costVariancePercent === null || costVariancePercent === undefined) {
+    // Fallback: Calculate from CPI if API doesn't provide it (for backward compatibility)
+    costVariancePercent = cpi > 1
+      ? Math.max(0, Math.min(100, Math.round((cpi - 1) * 100)))
+      : 0
+  } else if (typeof costVariancePercent !== 'number' || !isFinite(costVariancePercent)) {
+    console.warn('Invalid costVariancePercentage:', data.costVariancePercentage, 'Using fallback')
+    costVariancePercent = cpi > 1 ? Math.max(0, Math.min(100, Math.round((cpi - 1) * 100))) : 0
+  } else {
+    // Clamp to 0-100% range for safety
+    costVariancePercent = Math.max(0, Math.min(100, Math.round(costVariancePercent)))
+  }
 
   const kpis = [
     {
@@ -41,7 +63,7 @@ function KPICards({ data }) {
       description: spi < 1 
         ? `↓ Behind schedule by ${scheduleVariancePercent}%`
         : spi > 1
-        ? `↑ Ahead of schedule by ${Math.min(100, Math.round((spi - 1) * 100))}%`
+        ? `↑ Ahead of schedule by ${Math.max(0, Math.min(100, scheduleVariancePercent < 0 ? Math.abs(scheduleVariancePercent) : Math.round((spi - 1) * 100)))}%`
         : '✓ On schedule',
       icon: '📊',
       gradient: 'purple',
@@ -52,7 +74,7 @@ function KPICards({ data }) {
       description: cpi > 1
         ? `↑ Under budget by ${costVariancePercent}%`
         : cpi < 1
-        ? `↓ Over budget by ${Math.min(100, Math.round((1 - cpi) * 100))}%`
+        ? `↓ Over budget by ${Math.max(0, Math.min(100, costVariancePercent < 0 ? Math.abs(costVariancePercent) : Math.round((1 - cpi) * 100)))}%`
         : '✓ On budget',
       icon: '💵',
       gradient: 'green',

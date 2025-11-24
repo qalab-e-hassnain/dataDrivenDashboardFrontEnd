@@ -41,7 +41,11 @@ function AIForecasting({ data }) {
             </div>
             <div className="forecast-detail-item">
               <span className="detail-icon">📈</span>
-              <span>{Math.round(data.costVariance || 3)}% over initial budget</span>
+              <span>
+                {data.costVariance !== null && data.costVariance !== undefined
+                  ? `${Math.round(data.costVariance)}% ${data.costVariance >= 0 ? 'over' : 'under'} initial budget`
+                  : 'Cost variance not available'}
+              </span>
             </div>
           </div>
         </div>
