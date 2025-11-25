@@ -19,7 +19,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout for all requests
+  timeout: 20000, // 20 second timeout for all requests
   maxRedirects: 5, // Follow redirects automatically
 })
 
