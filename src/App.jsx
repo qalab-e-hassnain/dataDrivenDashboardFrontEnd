@@ -1,14 +1,25 @@
 import React from 'react'
-import Dashboard from './components/Dashboard'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import ErrorBoundary from './components/ErrorBoundary'
+import DashboardPage from './pages/DashboardPage'
+import CriticalPathPage from './pages/CriticalPathPage'
+import GanttChartPage from './pages/GanttChartPage'
 import './App.css'
 
 function App() {
   return (
     <ErrorBoundary>
-      <div className="App">
-        <Dashboard />
-      </div>
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/project/:projectId" element={<DashboardPage />} />
+            <Route path="/critical-path/:projectId" element={<CriticalPathPage />} />
+            <Route path="/gantt-chart/:projectId" element={<GanttChartPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Router>
     </ErrorBoundary>
   )
 }

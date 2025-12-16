@@ -52,30 +52,6 @@
   flex-shrink: 0;
 }
 
-.card-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.icon-btn {
-  background: #f3f4f6;
-  border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.icon-btn:hover {
-  background: #667eea;
-  color: white;
-  transform: translateY(-2px);
-}
 
 .workforce-metrics {
   display: grid;

@@ -331,7 +331,7 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
       <div className="header-content">
         <div className="header-left">
           <div className="header-title-section">
-            <h1 className="header-title">🚀 AI-Driven Project Management Dashboard</h1>
+            <h1 className="header-title">AI-Driven Project Management Dashboard</h1>
             <p className="header-subtitle">Advanced Analytics & Predictive Insights</p>
           </div>
         </div>
@@ -377,7 +377,6 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
           </div>
           {projectsError && (
             <div className="projects-error-tooltip" title={projectsError}>
-              <span className="projects-error-icon">⚠️</span>
               <div className="projects-error-message">{projectsError}</div>
             </div>
           )}

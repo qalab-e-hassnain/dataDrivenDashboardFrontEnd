@@ -663,6 +663,54 @@ export const apiService = {
       throw error
     }
   },
+
+  // ===== CRITICAL PATH & GANTT CHART API =====
+  // Get Critical Path data
+  getCriticalPath: async (projectId) => {
+    try {
+      const response = await api.get(`/critical-path/project/${projectId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching critical path:', error)
+      throw error
+    }
+  },
+
+  // Get Gantt chart data
+  getGanttData: async (projectId) => {
+    try {
+      const response = await api.get(`/gantt/project/${projectId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching Gantt data:', error)
+      throw error
+    }
+  },
+
+  // Download template
+  downloadTemplate: (format = 'excel') => {
+    // API_BASE_URL already includes /api, so we need to construct the full URL
+    const baseUrl = API_BASE_URL.endsWith('/api') 
+      ? API_BASE_URL.replace('/api', '') 
+      : API_BASE_URL.replace(/\/api\/?$/, '')
+    const url = `${baseUrl}/api/template/activities/${format}`
+    window.open(url, '_blank')
+  },
+
+  // Upload Primavera file
+  uploadPrimaveraFile: async (projectId, file) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      // Content-Type will be automatically removed by the interceptor for FormData
+      const response = await api.post(`/upload/project/${projectId}/primavera`, formData)
+      return response.data
+    } catch (error) {
+      console.error('Error uploading Primavera file:', error)
+      throw error
+    }
+  },
 }
 
 export default api

@@ -54,14 +54,14 @@ function ExportActions({ projectId, onExportStart, onExportComplete, onExportErr
         onClick={() => handleExport('Excel')}
         disabled={exporting !== null}
       >
-        📊 {exporting === 'Excel' ? 'Exporting...' : 'Export to Excel'}
+        {exporting === 'Excel' ? 'Exporting...' : 'Export to Excel'}
       </button>
       <button 
         className={`export-button ${exporting === 'PDF' ? 'exporting' : ''}`}
         onClick={() => handleExport('PDF')}
         disabled={exporting !== null}
       >
-        📄 {exporting === 'PDF' ? 'Generating...' : 'Generate PDF Report'}
+        {exporting === 'PDF' ? 'Generating...' : 'Generate PDF Report'}
       </button>
     </div>
   )

@@ -25,12 +25,6 @@
   text-align: center;
 }
 
-.no-project-icon {
-  font-size: 80px;
-  margin-bottom: 20px;
-  opacity: 0.5;
-}
-
 .no-project-selected h2 {
   font-size: 28px;
   font-weight: 600;

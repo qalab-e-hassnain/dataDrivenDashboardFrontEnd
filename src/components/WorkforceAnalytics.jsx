@@ -41,13 +41,8 @@ function WorkforceAnalytics({ data }) {
     <div className="workforce-section">
       <div className="section-header">
         <div className="section-title-wrapper">
-          <span className="section-icon">👷</span>
           <h2 className="section-title">Workforce Analytics</h2>
           <span className="ai-tag">AI POWERED</span>
-        </div>
-        <div className="card-actions">
-          <button className="icon-btn" title="Filter">🔍</button>
-          <button className="icon-btn" title="Export">📥</button>
         </div>
       </div>
 

@@ -22,14 +22,21 @@ import {
 } from '../utils/dataTransformers'
 import './Dashboard.css'
 
-function Dashboard() {
+function Dashboard({ projectIdFromRoute }) {
   // No default project - user must select one
-  const [projectId, setProjectId] = useState(null)
+  const [projectId, setProjectId] = useState(projectIdFromRoute || null)
   const [dashboardData, setDashboardData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
   const [toasts, setToasts] = useState([])
+
+  useEffect(() => {
+    // Update projectId if it comes from route
+    if (projectIdFromRoute && projectIdFromRoute !== projectId) {
+      setProjectId(projectIdFromRoute)
+    }
+  }, [projectIdFromRoute])
 
   useEffect(() => {
     // Only fetch data when projectId changes and is not null
@@ -407,7 +414,6 @@ function Dashboard() {
           />
           <div className="dashboard-content">
             <div className="no-project-selected">
-              <div className="no-project-icon">📊</div>
               <h2>Welcome to the Project Dashboard</h2>
               <p>Please select a project from the dropdown above to view its data and analytics.</p>
             </div>

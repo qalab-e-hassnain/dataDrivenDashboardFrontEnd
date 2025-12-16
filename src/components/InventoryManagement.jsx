@@ -17,7 +17,6 @@ function InventoryManagement({ data }) {
     <div className="inventory-section">
       <div className="section-header">
         <div className="section-title-wrapper">
-          <span className="section-icon">📦</span>
           <h2 className="section-title">Inventory Management</h2>
         </div>
       </div>
