@@ -205,6 +205,7 @@
   border: 1px solid #e5e7eb;
   border-top: none;
   border-radius: 0 0 8px 8px;
+  background: #f9fafb; /* Ensure consistent grey background across full scroll area */
 }
 
 .gantt-tasks-list {
@@ -244,11 +245,6 @@
   color: #6b7280;
 }
 
-.gantt-bar-container {
-  position: relative;
-  min-width: 1000px;
-}
-
 .gantt-bar {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -273,32 +269,6 @@
   font-size: 16px;
   color: #dc2626;
   font-weight: bold;
-}
-
-.task-details-column {
-  padding: 8px;
-  border-left: 1px solid #e5e7eb;
-  background: white;
-  font-size: 11px;
-  color: #6b7280;
-  position: sticky;
-  right: 0;
-  z-index: 5;
-}
-
-.task-detail-item {
-  margin-bottom: 4px;
-}
-
-.detail-label {
-  font-weight: 600;
-  color: #374151;
-  margin-right: 4px;
-}
-
-.float-zero {
-  color: #dc2626;
-  font-weight: 600;
 }
 
 /* Scrollbar */

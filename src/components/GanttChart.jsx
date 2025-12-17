@@ -113,6 +113,9 @@ function GanttChart({ projectId }) {
   const maxEF = Math.max(...tasks.map(t => t.ef || 0))
   const totalDays = maxEF - minES + 1
 
+  // Chart width in pixels (ensures background extends across full scroll area)
+  const chartWidth = Math.max(totalDays * scale, 800)
+
   // Generate date labels for timeline
   const generateTimelineLabels = () => {
     const labels = []
@@ -170,7 +173,7 @@ function GanttChart({ projectId }) {
       {/* Timeline Header */}
       <div className="gantt-timeline-header">
         <div className="task-name-header" style={{ width: '200px' }}>Task Name</div>
-        <div className="timeline-header" style={{ flex: 1, position: 'relative' }}>
+        <div className="timeline-header" style={{ width: `${chartWidth}px`, position: 'relative' }}>
           {timelineLabels.map((day, index) => (
             <div
               key={index}
@@ -209,7 +212,7 @@ function GanttChart({ projectId }) {
                 <div 
                   className="gantt-bar-container"
                   style={{ 
-                    flex: 1,
+                    width: `${chartWidth}px`,
                     position: 'relative',
                     height: '50px',
                     background: '#f9fafb',
@@ -243,20 +246,6 @@ function GanttChart({ projectId }) {
                       ⚠
                     </div>
                   )}
-                </div>
-                <div className="task-details-column" style={{ width: '150px', padding: '0 10px' }}>
-                  <div className="task-detail-item">
-                    <span className="detail-label">ES:</span> {task.es}
-                  </div>
-                  <div className="task-detail-item">
-                    <span className="detail-label">EF:</span> {task.ef}
-                  </div>
-                  <div className="task-detail-item">
-                    <span className="detail-label">Float:</span> 
-                    <span className={task.float === 0 ? 'float-zero' : ''}>
-                      {task.float}
-                    </span>
-                  </div>
                 </div>
               </div>
             )
