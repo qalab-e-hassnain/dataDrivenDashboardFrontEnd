@@ -132,4 +132,8 @@
   .ai-analytics-full-section {
     padding: 0 10px;
   }
+
+  .risk-management-section {
+    grid-template-columns: 1fr;
+  }
 }

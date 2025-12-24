@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { apiService } from '../services/api'
 import AIRecommendations from './AIRecommendations'
 import ProjectInsights from './ProjectInsights'
@@ -6,6 +7,7 @@ import ActionPlan from './ActionPlan'
 import './AIAnalytics.css'
 
 function AIAnalytics({ projectId }) {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('recommendations')
   const [recommendations, setRecommendations] = useState([])
   const [insights, setInsights] = useState(null)
@@ -108,19 +110,38 @@ function AIAnalytics({ projectId }) {
   return (
     <div className="ai-analytics-section">
       <div className="section-header">
-        <div className="header-left">
-          <div className="title-row">
-            <span className="section-icon">🤖</span>
-            <h2 className="section-title">AI Alerts & Recommendations</h2>
-          </div>
+        <div className="section-title-wrapper">
+          <h2 className="section-title">AI Alerts & Recommendations</h2>
         </div>
-        <button 
-          className={`refresh-btn ${loading ? 'refreshing' : ''}`}
-          onClick={handleRefresh}
-          disabled={loading}
-          title="Refresh AI analysis"
+        <div className="timeline-actions">
+          <button 
+            className={`refresh-btn ${loading ? 'refreshing' : ''}`}
+            onClick={handleRefresh}
+            disabled={loading}
+            title="Refresh AI analysis"
+          >
+            🔄 Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation Buttons */}
+      <div className="timeline-navigation">
+        <button
+          className="nav-button risk-register-button"
+          onClick={() => projectId && navigate(`/risk-register/${projectId}`)}
+          disabled={!projectId}
+          title="View Risk Register"
         >
-          🔄 Refresh
+          View Risk Register →
+        </button>
+        <button
+          className="nav-button risk-indicators-button"
+          onClick={() => projectId && navigate(`/risk-indicators/${projectId}`)}
+          disabled={!projectId}
+          title="View Risk Indicators"
+        >
+          View Risk Indicators →
         </button>
       </div>
 

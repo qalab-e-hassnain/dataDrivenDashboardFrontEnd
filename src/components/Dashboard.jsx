@@ -511,7 +511,7 @@ function Dashboard({ projectIdFromRoute }) {
           {/* Middle Section: Workforce & Inventory */}
           <div className="middle-section">
             <div className="middle-left">
-              <WorkforceAnalytics data={dashboardData?.workforce} />
+              <WorkforceAnalytics data={dashboardData?.workforce} projectId={projectId} />
             </div>
             <div className="middle-right">
               <InventoryManagement data={dashboardData?.inventory} />
