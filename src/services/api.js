@@ -297,6 +297,43 @@ export const apiService = {
     }
   },
 
+  // ==================== Workforce Dashboard API ====================
+  
+  // Get Total Workers
+  getTotalWorkers: async (projectId) => {
+    try {
+      const response = await api.get(`/workforce-dashboard/project/${projectId}/total-workers`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching total workers:', error)
+      throw error
+    }
+  },
+
+  // Get Active Workers
+  getActiveWorkers: async (projectId, daysActive = 30) => {
+    try {
+      const response = await api.get(`/workforce-dashboard/project/${projectId}/active-workers`, {
+        params: { days_active: daysActive }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching active workers:', error)
+      throw error
+    }
+  },
+
+  // Get Workforce Summary
+  getWorkforceSummary: async (projectId) => {
+    try {
+      const response = await api.get(`/workforce-dashboard/project/${projectId}/summary`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching workforce summary:', error)
+      throw error
+    }
+  },
+
   // ==================== EVM Metrics API ====================
   
   // Get EVM Metrics
@@ -708,6 +745,143 @@ export const apiService = {
       return response.data
     } catch (error) {
       console.error('Error uploading Primavera file:', error)
+      throw error
+    }
+  },
+
+  // ==================== Risk Management API ====================
+  
+  // Create Risk
+  createRisk: async (projectId, riskData) => {
+    try {
+      const response = await api.post(`/risk/project/${projectId}`, riskData)
+      return response.data
+    } catch (error) {
+      console.error('Error creating risk:', error)
+      throw error
+    }
+  },
+
+  // Get All Risks
+  getRisks: async (projectId, filters = {}) => {
+    try {
+      const response = await api.get(`/risk/project/${projectId}`, { params: filters })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching risks:', error)
+      throw error
+    }
+  },
+
+  // Get High Priority Risks
+  getHighPriorityRisks: async (projectId, threshold = 0.5) => {
+    try {
+      const response = await api.get(`/risk/project/${projectId}/high-priority`, {
+        params: { threshold }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching high priority risks:', error)
+      throw error
+    }
+  },
+
+  // Get Risk Register Summary
+  getRiskSummary: async (projectId) => {
+    try {
+      const response = await api.get(`/risk/project/${projectId}/summary`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching risk summary:', error)
+      throw error
+    }
+  },
+
+  // Get Mitigation Actions
+  getMitigationActions: async (riskId) => {
+    try {
+      const response = await api.get(`/risk/${riskId}/mitigation-actions`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching mitigation actions:', error)
+      throw error
+    }
+  },
+
+  // Auto-detect Risks
+  autoDetectRisks: async (projectId) => {
+    try {
+      const response = await api.post(`/risk/project/${projectId}/auto-detect`)
+      return response.data
+    } catch (error) {
+      console.error('Error auto-detecting risks:', error)
+      throw error
+    }
+  },
+
+  // Update Risk
+  updateRisk: async (riskId, riskData) => {
+    try {
+      const response = await api.put(`/risk/${riskId}`, riskData)
+      return response.data
+    } catch (error) {
+      console.error('Error updating risk:', error)
+      throw error
+    }
+  },
+
+  // Get Single Risk
+  getRisk: async (riskId) => {
+    try {
+      const response = await api.get(`/risk/${riskId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching risk:', error)
+      throw error
+    }
+  },
+
+  // ==================== Resource Leveling API ====================
+  
+  // Apply Resource Leveling
+  applyResourceLeveling: async (projectId, options = {}) => {
+    try {
+      const params = {
+        max_hours_per_day: options.maxHoursPerDay || 8,
+        max_hours_per_week: options.maxHoursPerWeek || 40,
+        consider_availability: options.considerAvailability !== false
+      }
+      const response = await api.post(`/resource-leveling/project/${projectId}/apply`, null, { params })
+      return response.data
+    } catch (error) {
+      console.error('Error applying resource leveling:', error)
+      throw error
+    }
+  },
+
+  // Get Resource Utilization Forecast
+  getUtilizationForecast: async (projectId, startDate, endDate) => {
+    try {
+      const params = {}
+      if (startDate) params.start_date = startDate
+      if (endDate) params.end_date = endDate
+      const response = await api.get(`/resource-leveling/project/${projectId}/utilization-forecast`, { params })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching utilization forecast:', error)
+      throw error
+    }
+  },
+
+  // ==================== Time-based Risk Indicators API ====================
+  
+  // Get Time-based Risk Indicators
+  getTimeBasedRiskIndicators: async (projectId) => {
+    try {
+      const response = await api.get(`/time-based-risk-indicators/project/${projectId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching time-based risk indicators:', error)
       throw error
     }
   },

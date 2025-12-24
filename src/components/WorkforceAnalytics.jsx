@@ -1,17 +1,74 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { apiService } from '../services/api'
 import './WorkforceAnalytics.css'
 
-function WorkforceAnalytics({ data }) {
+function WorkforceAnalytics({ data, projectId }) {
+  const navigate = useNavigate()
+  const [workforceSummary, setWorkforceSummary] = useState(null)
+  const [totalWorkers, setTotalWorkers] = useState(null)
+  const [activeWorkers, setActiveWorkers] = useState(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
+  const [selectedView, setSelectedView] = useState(null) // 'total', 'active', 'summary'
+  const [daysActive, setDaysActive] = useState(30)
+
+  useEffect(() => {
+    if (projectId) {
+      fetchWorkforceSummary()
+    }
+  }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchWorkforceSummary = async () => {
+    try {
+      const summary = await apiService.getWorkforceSummary(projectId)
+      setWorkforceSummary(summary)
+    } catch (err) {
+      console.error('Failed to fetch workforce summary:', err)
+    }
+  }
+
+  const handleMetricClick = async (type) => {
+    setLoadingDetails(true)
+    setSelectedView(type)
+    
+    try {
+      if (type === 'total') {
+        const workers = await apiService.getTotalWorkers(projectId)
+        setTotalWorkers(workers)
+      } else if (type === 'active') {
+        const workers = await apiService.getActiveWorkers(projectId, daysActive)
+        setActiveWorkers(workers)
+      } else if (type === 'summary') {
+        const summary = await apiService.getWorkforceSummary(projectId)
+        setWorkforceSummary(summary)
+      }
+    } catch (err) {
+      console.error('Failed to fetch worker details:', err)
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
+
+  const handleCloseModal = () => {
+    setSelectedView(null)
+    setTotalWorkers(null)
+    setActiveWorkers(null)
+  }
+
   if (!data) {
     return <div className="workforce-section">Loading workforce data...</div>
   }
 
+  // Use summary data if available, otherwise fall back to existing data
+  const totalWorkersCount = workforceSummary?.total_workers || Math.round(data.total || 247)
+  const activeWorkersCount = workforceSummary?.active_workers || Math.round(data.active || 203)
+
   const metrics = [
-    { label: 'Total Workforce', value: Math.round(data.total || 247) },
-    { label: 'Active Workers', value: Math.round(data.active || 203) },
-    { label: 'Avg. Productivity', value: `${Math.round(data.productivity || 87)}%` },
-    { label: 'Utilization Rate', value: `${Math.round(data.utilization || 92)}%` },
+    { label: 'Total Workforce', value: totalWorkersCount, type: 'total', clickable: true },
+    { label: 'Active Workers', value: activeWorkersCount, type: 'active', clickable: true },
+    { label: 'Avg. Productivity', value: `${Math.round(data.productivity || 87)}%`, type: 'productivity', clickable: false },
+    { label: 'Utilization Rate', value: `${Math.round(data.utilization || 92)}%`, type: 'utilization', clickable: false },
   ]
 
   // ✅ Use time-series data (now date-based from API)
@@ -44,11 +101,26 @@ function WorkforceAnalytics({ data }) {
           <h2 className="section-title">Workforce Analytics</h2>
           <span className="ai-tag">AI POWERED</span>
         </div>
+        <div className="workforce-navigation">
+          <button
+            className="nav-button resource-leveling-button"
+            onClick={() => projectId && navigate(`/resource-leveling/${projectId}`)}
+            disabled={!projectId}
+            title="View Resource Leveling analysis"
+          >
+            Resource Leveling →
+          </button>
+        </div>
       </div>
 
       <div className="workforce-metrics">
         {metrics.map((metric, index) => (
-          <div key={index} className="workforce-metric-card">
+          <div 
+            key={index} 
+            className={`workforce-metric-card ${metric.clickable ? 'clickable' : ''}`}
+            onClick={() => metric.clickable && handleMetricClick(metric.type)}
+            title={metric.clickable ? `Click to view ${metric.label} details` : ''}
+          >
             <div className="metric-value">{metric.value}</div>
             <div className="metric-label">{metric.label}</div>
             <div className="metric-progress-bar">
@@ -57,6 +129,7 @@ function WorkforceAnalytics({ data }) {
                 style={{ width: `${typeof metric.value === 'number' ? Math.min((metric.value / 300) * 100, 100) : Math.min(parseInt(metric.value), 100)}%` }}
               ></div>
             </div>
+            {metric.clickable && <div className="click-hint">Click to view details</div>}
           </div>
         ))}
       </div>
@@ -118,6 +191,330 @@ function WorkforceAnalytics({ data }) {
             No chart data available
           </div>
         )}
+      </div>
+
+      {/* Worker Details Modal */}
+      {selectedView && (
+        <WorkerDetailsModal
+          view={selectedView}
+          totalWorkers={totalWorkers}
+          activeWorkers={activeWorkers}
+          workforceSummary={workforceSummary}
+          loading={loadingDetails}
+          daysActive={daysActive}
+          onDaysActiveChange={setDaysActive}
+          onClose={handleCloseModal}
+        />
+      )}
+    </div>
+  )
+}
+
+// Worker Details Modal Component
+const WorkerDetailsModal = ({ 
+  view, 
+  totalWorkers, 
+  activeWorkers, 
+  workforceSummary, 
+  loading,
+  daysActive,
+  onDaysActiveChange,
+  onClose 
+}) => {
+  const getTitle = () => {
+    switch (view) {
+      case 'total':
+        return 'Total Workers'
+      case 'active':
+        return `Active Workers (Last ${daysActive} days)`
+      case 'summary':
+        return 'Workforce Summary'
+      default:
+        return 'Worker Details'
+    }
+  }
+
+  return (
+    <div className="worker-modal-overlay" onClick={onClose}>
+      <div className="worker-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="worker-modal-header">
+          <h2>{getTitle()}</h2>
+          <button className="modal-close-btn" onClick={onClose}>×</button>
+        </div>
+
+        <div className="worker-modal-body">
+          {loading ? (
+            <div className="worker-loading">Loading worker details...</div>
+          ) : (
+            <>
+              {view === 'total' && totalWorkers && (
+                <TotalWorkersView data={totalWorkers} />
+              )}
+              {view === 'active' && activeWorkers && (
+                <ActiveWorkersView 
+                  data={activeWorkers} 
+                  daysActive={daysActive}
+                  onDaysActiveChange={onDaysActiveChange}
+                />
+              )}
+              {view === 'summary' && workforceSummary && (
+                <WorkforceSummaryView data={workforceSummary} />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Total Workers View
+const TotalWorkersView = ({ data }) => {
+  return (
+    <div className="workers-view">
+      <div className="workers-summary-cards">
+        <div className="summary-stat-card">
+          <div className="stat-value">{data.total_workers}</div>
+          <div className="stat-label">Total Workers</div>
+        </div>
+        <div className="summary-stat-card">
+          <div className="stat-value">{data.summary?.unique_roles || 0}</div>
+          <div className="stat-label">Unique Roles</div>
+        </div>
+      </div>
+
+      {data.by_role && Object.keys(data.by_role).length > 0 && (
+        <div className="role-breakdown">
+          <h3>Workers by Role</h3>
+          <div className="role-badges">
+            {Object.entries(data.by_role).map(([role, count]) => (
+              <div key={role} className="role-badge">
+                <span className="role-name">{role}</span>
+                <span className="role-count">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.workers && data.workers.length > 0 && (
+        <div className="workers-table-section">
+          <h3>All Workers ({data.workers.length})</h3>
+          <div className="workers-table-container">
+            <table className="workers-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Employee ID</th>
+                  <th>Primary Role</th>
+                  <th>All Roles</th>
+                  <th>Total Hours</th>
+                  <th>Total Cost</th>
+                  <th>Entries</th>
+                  <th>Departments</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.workers.map((worker, index) => (
+                  <tr key={index}>
+                    <td className="worker-name">{worker.name}</td>
+                    <td>{worker.employee_id || 'N/A'}</td>
+                    <td>
+                      <span className="role-tag">{worker.primary_role || 'N/A'}</span>
+                    </td>
+                    <td>
+                      <div className="roles-list">
+                        {worker.roles && worker.roles.length > 0 ? (
+                          worker.roles.map((role, i) => (
+                            <span key={i} className="role-chip">{role}</span>
+                          ))
+                        ) : (
+                          'N/A'
+                        )}
+                      </div>
+                    </td>
+                    <td>{worker.total_hours?.toFixed(1) || 0} hrs</td>
+                    <td>PKR {worker.total_cost?.toLocaleString() || 0}</td>
+                    <td>{worker.entries_count || 0}</td>
+                    <td>
+                      {worker.departments && worker.departments.length > 0
+                        ? worker.departments.join(', ')
+                        : 'N/A'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Active Workers View
+const ActiveWorkersView = ({ data, daysActive, onDaysActiveChange }) => {
+  return (
+    <div className="workers-view">
+      <div className="active-workers-controls">
+        <label>
+          Days Active:
+          <select 
+            value={daysActive} 
+            onChange={(e) => onDaysActiveChange(Number(e.target.value))}
+            className="days-select"
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={60}>Last 60 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="workers-summary-cards">
+        <div className="summary-stat-card">
+          <div className="stat-value">{data.active_workers}</div>
+          <div className="stat-label">Active Workers</div>
+        </div>
+        <div className="summary-stat-card">
+          <div className="stat-value">{data.period_days}</div>
+          <div className="stat-label">Period (Days)</div>
+        </div>
+      </div>
+
+      {data.by_role && Object.keys(data.by_role).length > 0 && (
+        <div className="role-breakdown">
+          <h3>Active Workers by Role</h3>
+          <div className="role-badges">
+            {Object.entries(data.by_role).map(([role, count]) => (
+              <div key={role} className="role-badge">
+                <span className="role-name">{role}</span>
+                <span className="role-count">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.workers && data.workers.length > 0 && (
+        <div className="workers-table-section">
+          <h3>Active Workers ({data.workers.length})</h3>
+          <div className="workers-table-container">
+            <table className="workers-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Employee ID</th>
+                  <th>Primary Role</th>
+                  <th>Recent Hours</th>
+                  <th>Recent Cost</th>
+                  <th>Entries</th>
+                  <th>Last Active</th>
+                  <th>Days Since</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.workers.map((worker, index) => (
+                  <tr key={index}>
+                    <td className="worker-name">{worker.name}</td>
+                    <td>{worker.employee_id || 'N/A'}</td>
+                    <td>
+                      <span className="role-tag">{worker.primary_role || 'N/A'}</span>
+                    </td>
+                    <td>{worker.recent_hours?.toFixed(1) || 0} hrs</td>
+                    <td>PKR {worker.recent_cost?.toLocaleString() || 0}</td>
+                    <td>{worker.entries_count || 0}</td>
+                    <td>
+                      {worker.last_active
+                        ? new Date(worker.last_active).toLocaleDateString()
+                        : 'N/A'}
+                    </td>
+                    <td>
+                      {worker.days_since_last_active !== null && worker.days_since_last_active !== undefined
+                        ? `${worker.days_since_last_active} days`
+                        : 'N/A'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Workforce Summary View
+const WorkforceSummaryView = ({ data }) => {
+  return (
+    <div className="workers-view">
+      <div className="workers-summary-cards">
+        <div className="summary-stat-card total-card">
+          <div className="stat-value">{data.total_workers}</div>
+          <div className="stat-label">Total Workers</div>
+        </div>
+        <div className="summary-stat-card active-card">
+          <div className="stat-value">{data.active_workers}</div>
+          <div className="stat-label">Active Workers</div>
+        </div>
+        <div className="summary-stat-card inactive-card">
+          <div className="stat-value">{data.inactive_workers}</div>
+          <div className="stat-label">Inactive Workers</div>
+        </div>
+        <div className="summary-stat-card hours-card">
+          <div className="stat-value">{data.statistics?.total_hours?.toFixed(0) || 0}</div>
+          <div className="stat-label">Total Hours</div>
+        </div>
+        <div className="summary-stat-card cost-card">
+          <div className="stat-value">PKR {data.statistics?.total_cost?.toLocaleString() || 0}</div>
+          <div className="stat-label">Total Cost</div>
+        </div>
+        <div className="summary-stat-card utilization-card">
+          <div className="stat-value">{data.statistics?.average_utilization?.toFixed(1) || 0}%</div>
+          <div className="stat-label">Avg Utilization</div>
+        </div>
+      </div>
+
+      <div className="summary-sections">
+        <div className="summary-section">
+          <h3>Workers by Role (All)</h3>
+          <div className="role-badges">
+            {data.workers_by_role && Object.entries(data.workers_by_role).map(([role, count]) => (
+              <div key={role} className="role-badge">
+                <span className="role-name">{role}</span>
+                <span className="role-count">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="summary-section">
+          <h3>Active Workers by Role</h3>
+          <div className="role-badges">
+            {data.active_workers_by_role && Object.entries(data.active_workers_by_role).map(([role, count]) => (
+              <div key={role} className="role-badge active">
+                <span className="role-name">{role}</span>
+                <span className="role-count">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="summary-section">
+          <h3>Statistics</h3>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <span className="stat-item-label">Unique Roles:</span>
+              <span className="stat-item-value">{data.statistics?.unique_roles || 0}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-item-label">Recent Activity Period:</span>
+              <span className="stat-item-value">{data.recent_activity?.period_days || 30} days</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
