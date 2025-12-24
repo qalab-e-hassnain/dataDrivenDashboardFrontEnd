@@ -14,6 +14,108 @@
   border-bottom: 2px solid #f3f4f6;
 }
 
+/* Filter Bar */
+.critical-path-filters {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 25px;
+  padding: 15px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #f3f4f6 100%);
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.critical-path-filters .filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.critical-path-filters .filter-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.critical-path-filters .filter-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.critical-path-filters .filter-select,
+.critical-path-filters .filter-input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  color: #374151;
+  transition: all 0.2s;
+}
+
+.critical-path-filters .filter-select {
+  min-width: 180px;
+  cursor: pointer;
+}
+
+.critical-path-filters .filter-select:focus,
+.critical-path-filters .filter-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.critical-path-filters .filter-input {
+  min-width: 200px;
+  flex: 1;
+}
+
+.critical-path-filters .filter-results {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.no-results-message {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px dashed #d1d5db;
+}
+
+@media (max-width: 768px) {
+  .critical-path-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .critical-path-filters .filter-group {
+    width: 100%;
+  }
+
+  .critical-path-filters .filter-input {
+    width: 100%;
+  }
+
+  .critical-path-filters .filter-results {
+    margin-left: 0;
+    margin-top: 10px;
+  }
+}
+
 .refresh-button {
   padding: 10px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

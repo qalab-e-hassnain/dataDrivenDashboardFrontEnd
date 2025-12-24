@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { apiService } from '../services/api'
 import { getCachedData, setCachedData } from '../utils/cache'
 import './CriticalPathView.css'
@@ -7,6 +7,11 @@ function CriticalPathView({ projectId }) {
   const [criticalPath, setCriticalPath] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [filters, setFilters] = useState({
+    criticalOnly: false,
+    search: '',
+    floatRange: 'all'
+  })
   const isMountedRef = useRef(true)
 
   useEffect(() => {
@@ -106,6 +111,48 @@ function CriticalPathView({ projectId }) {
     )
   }
 
+  // Filter activities based on current filters
+  const filteredActivities = useMemo(() => {
+    if (!criticalPath.activities || !Array.isArray(criticalPath.activities)) return []
+    
+    return criticalPath.activities.filter(activity => {
+      // Critical only filter
+      if (filters.criticalOnly && !activity.is_critical) return false
+      
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase()
+        const taskName = ((activity.task_name || activity.name || '') + ' ' + (activity.task_id || activity.id || '')).toLowerCase()
+        if (!taskName.includes(searchLower)) return false
+      }
+      
+      // Float range filter
+      if (filters.floatRange !== 'all') {
+        const float = activity.float || 0
+        if (filters.floatRange === 'zero' && float !== 0) return false
+        if (filters.floatRange === 'low' && (float === 0 || float > 5)) return false
+        if (filters.floatRange === 'high' && float <= 5) return false
+      }
+      
+      return true
+    })
+  }, [criticalPath.activities, filters])
+
+  // Filter critical path sequence
+  const filteredCriticalPath = useMemo(() => {
+    if (!criticalPath.critical_path || !Array.isArray(criticalPath.critical_path)) return []
+    
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase()
+      return criticalPath.critical_path.filter(task => {
+        const taskName = ((task.task_name || task.name || '') + ' ' + (task.task_id || task.id || '')).toLowerCase()
+        return taskName.includes(searchLower)
+      })
+    }
+    
+    return criticalPath.critical_path
+  }, [criticalPath.critical_path, filters.search])
+
   return (
     <div className="critical-path-view">
       {/* Header with refresh button */}
@@ -117,6 +164,48 @@ function CriticalPathView({ projectId }) {
         >
           Refresh
         </button>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="critical-path-filters">
+        <div className="filter-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={filters.criticalOnly}
+              onChange={(e) => setFilters({ ...filters, criticalOnly: e.target.checked })}
+            />
+            Critical Tasks Only
+          </label>
+        </div>
+        <div className="filter-group">
+          <label htmlFor="float-filter">Float:</label>
+          <select
+            id="float-filter"
+            value={filters.floatRange}
+            onChange={(e) => setFilters({ ...filters, floatRange: e.target.value })}
+            className="filter-select"
+          >
+            <option value="all">All Float Values</option>
+            <option value="zero">Zero Float (Critical)</option>
+            <option value="low">Low Float (0-5 days)</option>
+            <option value="high">High Float (&gt;5 days)</option>
+          </select>
+        </div>
+        <div className="filter-group">
+          <label htmlFor="search-filter">Search:</label>
+          <input
+            id="search-filter"
+            type="text"
+            placeholder="Search activities..."
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            className="filter-input"
+          />
+        </div>
+        <div className="filter-results">
+          Showing {filteredActivities.length} of {criticalPath.activities?.length || 0} activities
+        </div>
       </div>
 
       {/* Summary */}
@@ -151,9 +240,13 @@ function CriticalPathView({ projectId }) {
       {/* Critical Path Sequence */}
       {criticalPath.critical_path && criticalPath.critical_path.length > 0 && (
         <div className="path-sequence">
-          <h3 className="section-subtitle">Critical Path Sequence</h3>
-          <div className="path-list">
-            {criticalPath.critical_path.map((task, index) => (
+          <h3 className="section-subtitle">
+            Critical Path Sequence 
+            {filters.search && ` (${filteredCriticalPath.length} of ${criticalPath.critical_path.length} found)`}
+          </h3>
+          {filteredCriticalPath.length > 0 ? (
+            <div className="path-list">
+              {filteredCriticalPath.map((task, index) => (
               <div 
                 key={index} 
                 className={`path-item ${task.float === 0 ? 'critical' : ''}`}
@@ -191,57 +284,73 @@ function CriticalPathView({ projectId }) {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          ) : (
+            <div className="no-results-message">
+              No tasks match the current filters. Try adjusting your search criteria.
+            </div>
+          )}
         </div>
       )}
 
       {/* All Activities Table */}
       {criticalPath.activities && criticalPath.activities.length > 0 && (
         <div className="activities-table-section">
-          <h3 className="section-subtitle">All Activities</h3>
-          <div className="table-container">
-            <table className="activities-table">
-              <thead>
-                <tr>
-                  <th>Task ID</th>
-                  <th>Task Name</th>
-                  <th>Duration</th>
-                  <th>ES</th>
-                  <th>EF</th>
-                  <th>LS</th>
-                  <th>LF</th>
-                  <th>Float</th>
-                  <th>Critical</th>
-                </tr>
-              </thead>
-              <tbody>
-                {criticalPath.activities.map((activity, index) => (
-                  <tr 
-                    key={index}
-                    className={activity.is_critical ? 'critical-row' : ''}
-                  >
-                    <td>{activity.task_id || activity.id}</td>
-                    <td className="task-name-cell">{activity.task_name || activity.name}</td>
-                    <td>{activity.duration}</td>
-                    <td>{activity.es}</td>
-                    <td>{activity.ef}</td>
-                    <td>{activity.ls}</td>
-                    <td>{activity.lf}</td>
-                    <td className={activity.float === 0 ? 'float-zero' : ''}>
-                      {activity.float}
-                    </td>
-                    <td>
-                      {activity.is_critical ? (
-                        <span className="critical-badge">Yes</span>
-                      ) : (
-                        <span className="non-critical-badge">No</span>
-                      )}
-                    </td>
+          <h3 className="section-subtitle">
+            All Activities 
+            {filters.criticalOnly || filters.floatRange !== 'all' || filters.search 
+              ? ` (${filteredActivities.length} of ${criticalPath.activities.length} shown)` 
+              : ''}
+          </h3>
+          {filteredActivities.length > 0 ? (
+            <div className="table-container">
+              <table className="activities-table">
+                <thead>
+                  <tr>
+                    <th>Task ID</th>
+                    <th>Task Name</th>
+                    <th>Duration</th>
+                    <th>ES</th>
+                    <th>EF</th>
+                    <th>LS</th>
+                    <th>LF</th>
+                    <th>Float</th>
+                    <th>Critical</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredActivities.map((activity, index) => (
+                    <tr 
+                      key={index}
+                      className={activity.is_critical ? 'critical-row' : ''}
+                    >
+                      <td>{activity.task_id || activity.id}</td>
+                      <td className="task-name-cell">{activity.task_name || activity.name}</td>
+                      <td>{activity.duration}</td>
+                      <td>{activity.es}</td>
+                      <td>{activity.ef}</td>
+                      <td>{activity.ls}</td>
+                      <td>{activity.lf}</td>
+                      <td className={activity.float === 0 ? 'float-zero' : ''}>
+                        {activity.float}
+                      </td>
+                      <td>
+                        {activity.is_critical ? (
+                          <span className="critical-badge">Yes</span>
+                        ) : (
+                          <span className="non-critical-badge">No</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="no-results-message">
+              No activities match the current filters. Try adjusting your search criteria.
+            </div>
+          )}
         </div>
       )}
     </div>
