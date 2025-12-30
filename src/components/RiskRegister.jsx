@@ -10,7 +10,7 @@ const RiskRegister = ({ projectId }) => {
   const [filters, setFilters] = useState({
     status: null,
     category: null,
-    min_risk_score: 0.5
+    min_risk_score: null // Show all risks by default
   })
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedRisk, setSelectedRisk] = useState(null)
@@ -24,18 +24,58 @@ const RiskRegister = ({ projectId }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, filters])
 
-  const fetchRisks = async () => {
+  const fetchRisks = async (useFilters = true) => {
     setLoading(true)
     setError(null)
     try {
-      const params = Object.fromEntries(
-        Object.entries(filters).filter(([_, v]) => v !== null && v !== '')
-      )
+      // Build params - only include filters if useFilters is true and they have values
+      const params = useFilters 
+        ? Object.fromEntries(
+            Object.entries(filters).filter(([_, v]) => v !== null && v !== '')
+          )
+        : {}
+      
       const data = await apiService.getRisks(projectId, params)
-      setRisks(Array.isArray(data) ? data : [])
+      
+      // Handle different response formats
+      let risksArray = []
+      if (Array.isArray(data)) {
+        risksArray = data
+      } else if (data && Array.isArray(data.risks)) {
+        risksArray = data.risks
+      } else if (data && Array.isArray(data.data)) {
+        risksArray = data.data
+      }
+      
+      // Remove duplicates based on risk ID (keep first occurrence)
+      const seenIds = new Set()
+      const uniqueRisks = risksArray.filter((risk) => {
+        const riskId = risk.id || risk._id || risk.risk_id
+        if (!riskId) {
+          // If no ID, create a composite key from title + description + category
+          const compositeKey = `${risk.title || ''}_${risk.description || ''}_${risk.category || ''}`
+          if (seenIds.has(compositeKey)) {
+            return false
+          }
+          seenIds.add(compositeKey)
+          return true
+        }
+        if (seenIds.has(riskId)) {
+          return false
+        }
+        seenIds.add(riskId)
+        return true
+      })
+      
+      if (risksArray.length !== uniqueRisks.length) {
+        console.log(`Removed ${risksArray.length - uniqueRisks.length} duplicate risk(s)`)
+      }
+      
+      setRisks(uniqueRisks)
     } catch (err) {
       console.error('Failed to fetch risks:', err)
       setError('Failed to load risks. Please try again.')
+      setRisks([])
     } finally {
       setLoading(false)
     }
@@ -57,33 +97,52 @@ const RiskRegister = ({ projectId }) => {
     try {
       await apiService.createRisk(projectId, riskData)
       setShowCreateForm(false)
+      // Clear filters to show all risks including the new one
+      setFilters({
+        status: null,
+        category: null,
+        min_risk_score: null
+      })
       // Wait a bit for backend to process, then refresh
       setTimeout(async () => {
         await fetchRisks()
         await fetchSummary()
-      }, 500)
+      }, 1000)
     } catch (err) {
       console.error('Failed to create risk:', err)
-      alert('Failed to create risk. Please try again.')
+      // Re-throw the full error object so form can parse validation errors
+      throw err
     }
   }
 
   const handleAutoDetect = async () => {
     try {
+      setLoading(true)
       const result = await apiService.autoDetectRisks(projectId)
-      if (result.risks && result.risks.length > 0) {
-        // Wait a bit for backend to process, then refresh
-        setTimeout(async () => {
-          await fetchRisks()
-          await fetchSummary()
-        }, 500)
-        alert(`Auto-detected ${result.detected_count} new risks.`)
-      } else {
-        alert('No new risks detected.')
-      }
+      const detectedCount = result.detected_count || result.risks?.length || 0
+      
+      // Clear filters to show all risks including newly detected ones
+      setFilters({
+        status: null,
+        category: null,
+        min_risk_score: null
+      })
+      
+      // Wait a bit for backend to process, then refresh
+      setTimeout(async () => {
+        await fetchRisks()
+        await fetchSummary()
+        if (detectedCount > 0) {
+          alert(`Auto-detected ${detectedCount} new risk${detectedCount > 1 ? 's' : ''}.`)
+        } else {
+          alert('No new risks detected.')
+        }
+      }, 1500)
     } catch (err) {
       console.error('Failed to auto-detect risks:', err)
-      alert('Failed to auto-detect risks. Please try again.')
+      setLoading(false)
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to auto-detect risks. Please try again.'
+      alert(errorMessage)
     }
   }
 
@@ -199,8 +258,10 @@ const RiskRegister = ({ projectId }) => {
         {risks.length === 0 ? (
           <div className="no-risks">No risks found. Create a new risk or use auto-detect.</div>
         ) : (
-          risks.map((risk) => (
-            <div key={risk.id} className="risk-card">
+          risks.map((risk, index) => {
+            const riskId = risk.id || risk._id || risk.risk_id || `risk-${index}`
+            return (
+            <div key={riskId} className="risk-card">
               <div className="risk-card-header">
                 <h3>{risk.title}</h3>
                 <div className="risk-badges">
@@ -236,12 +297,13 @@ const RiskRegister = ({ projectId }) => {
                 )}
               </div>
               <div className="risk-actions">
-                <button onClick={() => handleViewMitigation(risk.id)} className="btn-mitigation">
+                <button onClick={() => handleViewMitigation(risk.id || risk._id || risk.risk_id)} className="btn-mitigation">
                   View Mitigation Actions
                 </button>
               </div>
             </div>
-          ))
+            )
+          })
         )}
       </div>
 
@@ -276,28 +338,165 @@ const CreateRiskForm = ({ projectId, onSubmit, onCancel }) => {
     impact: 'medium',
     potential_schedule_impact_days: '',
     potential_cost_impact: '',
+    earliest_occurrence_date: '',
+    latest_occurrence_date: '',
     mitigation_strategy: '',
-    mitigation_actions: [],
+    mitigation_actions: [''],
     mitigation_owner: '',
-    mitigation_deadline: ''
+    mitigation_deadline: '',
+    contingency_plan: '',
+    contingency_cost: '',
+    identified_by: ''
   })
+  const [error, setError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    const data = {
-      ...formData,
-      potential_schedule_impact_days: formData.potential_schedule_impact_days ? parseFloat(formData.potential_schedule_impact_days) : undefined,
-      potential_cost_impact: formData.potential_cost_impact ? parseFloat(formData.potential_cost_impact) : undefined,
-      mitigation_actions: formData.mitigation_actions.filter(a => a.trim() !== ''),
-      mitigation_deadline: formData.mitigation_deadline || undefined
+  // Helper function to format date to ISO 8601
+  const formatDateForAPI = (dateString) => {
+    if (!dateString) return undefined
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return undefined
+      return date.toISOString()
+    } catch (err) {
+      return undefined
     }
-    onSubmit(data)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+
+    try {
+      // Validate required fields
+      if (!formData.title.trim()) {
+        setError('Title is required')
+        setSubmitting(false)
+        return
+      }
+      if (!formData.description.trim()) {
+        setError('Description is required')
+        setSubmitting(false)
+        return
+      }
+
+      // Validate date range
+      if (formData.earliest_occurrence_date && formData.latest_occurrence_date) {
+        const earliest = new Date(formData.earliest_occurrence_date)
+        const latest = new Date(formData.latest_occurrence_date)
+        if (latest < earliest) {
+          setError('Latest occurrence date must be after earliest occurrence date')
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // Prepare data with proper formatting
+      const data = {
+        project_id: projectId, // Required by API
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category,
+        probability: formData.probability,
+        impact: formData.impact,
+        potential_schedule_impact_days: formData.potential_schedule_impact_days 
+          ? parseFloat(formData.potential_schedule_impact_days) 
+          : undefined,
+        potential_cost_impact: formData.potential_cost_impact 
+          ? parseFloat(formData.potential_cost_impact) 
+          : undefined,
+        earliest_occurrence_date: formatDateForAPI(formData.earliest_occurrence_date),
+        latest_occurrence_date: formatDateForAPI(formData.latest_occurrence_date),
+        mitigation_strategy: formData.mitigation_strategy.trim() || undefined,
+        mitigation_actions: formData.mitigation_actions
+          .filter(a => a && a.trim() !== '')
+          .map(a => a.trim()),
+        mitigation_owner: formData.mitigation_owner.trim() || undefined,
+        mitigation_deadline: formatDateForAPI(formData.mitigation_deadline),
+        contingency_plan: formData.contingency_plan.trim() || undefined,
+        contingency_cost: formData.contingency_cost 
+          ? parseFloat(formData.contingency_cost) 
+          : undefined,
+        identified_by: formData.identified_by.trim() || undefined
+      }
+
+      // Remove undefined values (but keep project_id even if somehow undefined, as it's required)
+      Object.keys(data).forEach(key => {
+        if (key !== 'project_id' && (data[key] === undefined || data[key] === '')) {
+          delete data[key]
+        }
+      })
+      
+      // Ensure project_id is always included
+      if (!data.project_id && projectId) {
+        data.project_id = projectId
+      }
+
+      await onSubmit(data)
+    } catch (err) {
+      // Parse API validation errors
+      let errorMessage = 'Failed to create risk. Please check all fields and try again.'
+      
+      if (err.response?.data) {
+        const errorData = err.response.data
+        
+        // Handle validation errors (array format)
+        if (Array.isArray(errorData.detail)) {
+          const validationErrors = errorData.detail.map(error => {
+            const field = error.loc && error.loc.length > 1 ? error.loc[error.loc.length - 1] : 'field'
+            const fieldName = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            return `${fieldName}: ${error.msg}`
+          })
+          errorMessage = `Validation errors:\n${validationErrors.join('\n')}`
+        } 
+        // Handle single error message
+        else if (errorData.detail) {
+          errorMessage = typeof errorData.detail === 'string' 
+            ? errorData.detail 
+            : JSON.stringify(errorData.detail)
+        }
+        // Handle error message field
+        else if (errorData.message) {
+          errorMessage = errorData.message
+        }
+      } 
+      // Handle network/other errors
+      else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      setError(errorMessage)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const addMitigationAction = () => {
+    setFormData({
+      ...formData,
+      mitigation_actions: [...formData.mitigation_actions, '']
+    })
+  }
+
+  const removeMitigationAction = (index) => {
+    setFormData({
+      ...formData,
+      mitigation_actions: formData.mitigation_actions.filter((_, i) => i !== index)
+    })
+  }
+
+  const updateMitigationAction = (index, value) => {
+    const newActions = [...formData.mitigation_actions]
+    newActions[index] = value
+    setFormData({ ...formData, mitigation_actions: newActions })
   }
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
+      <div className="modal-content create-risk-modal">
         <h3>Create New Risk</h3>
+        {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Title *</label>
@@ -306,6 +505,7 @@ const CreateRiskForm = ({ projectId, onSubmit, onCancel }) => {
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               required
+              placeholder="Enter risk title"
             />
           </div>
           <div className="form-group">
@@ -314,6 +514,8 @@ const CreateRiskForm = ({ projectId, onSubmit, onCancel }) => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               required
+              rows={4}
+              placeholder="Enter detailed risk description"
             />
           </div>
           <div className="form-row">
@@ -340,11 +542,11 @@ const CreateRiskForm = ({ projectId, onSubmit, onCancel }) => {
                 onChange={(e) => setFormData({ ...formData, probability: e.target.value })}
                 required
               >
-                <option value="very_low">Very Low</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="very_high">Very High</option>
+                <option value="very_low">Very Low (0-20%)</option>
+                <option value="low">Low (21-40%)</option>
+                <option value="medium">Medium (41-60%)</option>
+                <option value="high">High (61-80%)</option>
+                <option value="very_high">Very High (81-100%)</option>
               </select>
             </div>
             <div className="form-group">
@@ -367,16 +569,41 @@ const CreateRiskForm = ({ projectId, onSubmit, onCancel }) => {
               <label>Schedule Impact (days)</label>
               <input
                 type="number"
+                min="0"
+                step="0.1"
                 value={formData.potential_schedule_impact_days}
                 onChange={(e) => setFormData({ ...formData, potential_schedule_impact_days: e.target.value })}
+                placeholder="e.g., 5.0"
               />
             </div>
             <div className="form-group">
               <label>Cost Impact (PKR)</label>
               <input
                 type="number"
+                min="0"
+                step="0.01"
                 value={formData.potential_cost_impact}
                 onChange={(e) => setFormData({ ...formData, potential_cost_impact: e.target.value })}
+                placeholder="e.g., 10000.0"
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Earliest Occurrence Date</label>
+              <input
+                type="date"
+                value={formData.earliest_occurrence_date}
+                onChange={(e) => setFormData({ ...formData, earliest_occurrence_date: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Latest Occurrence Date</label>
+              <input
+                type="date"
+                value={formData.latest_occurrence_date}
+                onChange={(e) => setFormData({ ...formData, latest_occurrence_date: e.target.value })}
+                min={formData.earliest_occurrence_date || undefined}
               />
             </div>
           </div>
@@ -385,11 +612,109 @@ const CreateRiskForm = ({ projectId, onSubmit, onCancel }) => {
             <textarea
               value={formData.mitigation_strategy}
               onChange={(e) => setFormData({ ...formData, mitigation_strategy: e.target.value })}
+              rows={3}
+              placeholder="Describe the planned mitigation approach"
+            />
+          </div>
+          <div className="form-group">
+            <label>
+              Mitigation Actions
+              <button 
+                type="button" 
+                onClick={addMitigationAction} 
+                className="btn-add-action"
+                title="Add another action"
+              >
+                + Add Action
+              </button>
+            </label>
+            {formData.mitigation_actions.map((action, index) => (
+              <div key={index} className="mitigation-action-input">
+                <input
+                  type="text"
+                  value={action}
+                  onChange={(e) => updateMitigationAction(index, e.target.value)}
+                  placeholder={`Mitigation action ${index + 1}`}
+                />
+                {formData.mitigation_actions.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeMitigationAction(index)}
+                    className="btn-remove-action"
+                    title="Remove this action"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Mitigation Owner</label>
+              <input
+                type="text"
+                value={formData.mitigation_owner}
+                onChange={(e) => setFormData({ ...formData, mitigation_owner: e.target.value })}
+                placeholder="Person responsible for mitigation"
+              />
+            </div>
+            <div className="form-group">
+              <label>Mitigation Deadline</label>
+              <input
+                type="date"
+                value={formData.mitigation_deadline}
+                onChange={(e) => setFormData({ ...formData, mitigation_deadline: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Contingency Plan</label>
+              <textarea
+                value={formData.contingency_plan}
+                onChange={(e) => setFormData({ ...formData, contingency_plan: e.target.value })}
+                rows={2}
+                placeholder="Plan if risk occurs"
+              />
+            </div>
+            <div className="form-group">
+              <label>Contingency Cost (PKR)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.contingency_cost}
+                onChange={(e) => setFormData({ ...formData, contingency_cost: e.target.value })}
+                placeholder="e.g., 5000.0"
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Identified By</label>
+            <input
+              type="text"
+              value={formData.identified_by}
+              onChange={(e) => setFormData({ ...formData, identified_by: e.target.value })}
+              placeholder="Person who identified the risk"
             />
           </div>
           <div className="form-actions">
-            <button type="submit" className="btn-primary">Create Risk</button>
-            <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>
+            <button 
+              type="submit" 
+              className="btn-primary" 
+              disabled={submitting}
+            >
+              {submitting ? 'Creating...' : 'Create Risk'}
+            </button>
+            <button 
+              type="button" 
+              onClick={onCancel} 
+              className="btn-secondary"
+              disabled={submitting}
+            >
+              Cancel
+            </button>
           </div>
         </form>
       </div>
