@@ -269,6 +269,39 @@ export const apiService = {
     }
   },
 
+  // Get Inventory Thresholds
+  getInventoryThresholds: async (projectId) => {
+    try {
+      const response = await api.get(`/inventory/project/${projectId}/thresholds`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching inventory thresholds:', error)
+      throw error
+    }
+  },
+
+  // Update Inventory Thresholds
+  updateInventoryThresholds: async (projectId, thresholds) => {
+    try {
+      const params = new URLSearchParams()
+      if (thresholds.low_stock_threshold !== undefined) {
+        params.append('low_stock_threshold', thresholds.low_stock_threshold)
+      }
+      if (thresholds.critical_stock_threshold !== undefined) {
+        params.append('critical_stock_threshold', thresholds.critical_stock_threshold)
+      }
+      if (thresholds.daily_usage_percentage_threshold !== undefined) {
+        params.append('daily_usage_percentage_threshold', thresholds.daily_usage_percentage_threshold)
+      }
+      
+      const response = await api.put(`/inventory/project/${projectId}/thresholds?${params.toString()}`)
+      return response.data
+    } catch (error) {
+      console.error('Error updating inventory thresholds:', error)
+      throw error
+    }
+  },
+
   // ==================== Workforce API ====================
   
   // Get Workforce by Project

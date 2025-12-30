@@ -192,7 +192,13 @@ function Dashboard({ projectIdFromRoute }) {
           kpi: transformKPIData(evmData, forecastData, projectData),
           evm: transformEVMMetrics(evmData, projectData),
           workforce: transformWorkforceData(workforceData, workforceTrendsData), // ✅ Pass trends data
-          inventory: transformInventoryData(inventoryData),
+          inventory: transformInventoryData(
+            inventoryData?.inventory_entries || inventoryData, 
+            [],
+            inventoryData?.thresholds
+          ),
+          inventoryThresholds: inventoryData?.thresholds || null,
+          inventoryThresholdsExplanation: inventoryData?.thresholds_explanation || null,
           forecasts: transformForecastData(forecastData),
           timeline: transformTasksToTimeline(tasksData),
           alerts: transformAlerts(alertsData, anomaliesData),
@@ -514,7 +520,12 @@ function Dashboard({ projectIdFromRoute }) {
               <WorkforceAnalytics data={dashboardData?.workforce} projectId={projectId} />
             </div>
             <div className="middle-right">
-              <InventoryManagement data={dashboardData?.inventory} />
+              <InventoryManagement 
+                data={dashboardData?.inventory} 
+                projectId={projectId}
+                thresholds={dashboardData?.inventoryThresholds}
+                thresholdsExplanation={dashboardData?.inventoryThresholdsExplanation}
+              />
             </div>
           </div>
 

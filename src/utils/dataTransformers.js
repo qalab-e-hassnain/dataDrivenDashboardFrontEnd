@@ -272,13 +272,18 @@ export const transformWorkforceData = (workforceData, trendsData = null) => {
 /**
  * Transform inventory data to dashboard format
  */
-export const transformInventoryData = (inventoryData, depletionPredictions = []) => {
+export const transformInventoryData = (inventoryData, depletionPredictions = [], thresholds = null) => {
   if (!inventoryData || !Array.isArray(inventoryData)) {
     return []
   }
 
+  // Use project-specific thresholds or defaults
+  const lowStockThreshold = thresholds?.low_stock_threshold ?? 10.0
+  const criticalStockThreshold = thresholds?.critical_stock_threshold ?? 5.0
+  const dailyUsagePercentageThreshold = thresholds?.daily_usage_percentage_threshold ?? 0.1
+
   return inventoryData.map((item) => {
-    // Determine status based on stock level and predictions
+    // Determine status based on stock level, thresholds, and predictions
     let status = 'Adequate'
     const stockLevel = item.stock_level || 0
     const dailyUsage = item.daily_usage || 0
@@ -287,8 +292,13 @@ export const transformInventoryData = (inventoryData, depletionPredictions = [])
     const prediction = depletionPredictions.find(p => p.inventory_id === item.id)
     const daysRemaining = prediction?.days_remaining || (dailyUsage > 0 ? stockLevel / dailyUsage : 999)
 
-    if (daysRemaining < 5) {
+    // Use project-specific thresholds for status determination
+    if (stockLevel < criticalStockThreshold) {
+      status = 'Critical Stock'
+    } else if (stockLevel < lowStockThreshold) {
       status = 'Low Stock'
+    } else if (dailyUsage > stockLevel * dailyUsagePercentageThreshold) {
+      status = 'High Usage'
     } else if (daysRemaining < 15) {
       status = 'Moderate'
     }
