@@ -83,6 +83,50 @@ function CriticalPathView({ projectId }) {
     }
   }
 
+  // Filter activities based on current filters
+  // MUST be called before early returns to follow Rules of Hooks
+  const filteredActivities = useMemo(() => {
+    if (!criticalPath?.activities || !Array.isArray(criticalPath.activities)) return []
+    
+    return criticalPath.activities.filter(activity => {
+      // Critical only filter
+      if (filters.criticalOnly && !activity.is_critical) return false
+      
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase()
+        const taskName = ((activity.task_name || activity.name || '') + ' ' + (activity.task_id || activity.id || '')).toLowerCase()
+        if (!taskName.includes(searchLower)) return false
+      }
+      
+      // Float range filter
+      if (filters.floatRange !== 'all') {
+        const float = activity.float || 0
+        if (filters.floatRange === 'zero' && float !== 0) return false
+        if (filters.floatRange === 'low' && (float === 0 || float > 5)) return false
+        if (filters.floatRange === 'high' && float <= 5) return false
+      }
+      
+      return true
+    })
+  }, [criticalPath?.activities, filters])
+
+  // Filter critical path sequence
+  // MUST be called before early returns to follow Rules of Hooks
+  const filteredCriticalPath = useMemo(() => {
+    if (!criticalPath?.critical_path || !Array.isArray(criticalPath.critical_path)) return []
+    
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase()
+      return criticalPath.critical_path.filter(task => {
+        const taskName = ((task.task_name || task.name || '') + ' ' + (task.task_id || task.id || '')).toLowerCase()
+        return taskName.includes(searchLower)
+      })
+    }
+    
+    return criticalPath.critical_path
+  }, [criticalPath?.critical_path, filters.search])
+
   if (loading) {
     return (
       <div className="critical-path-loading">
@@ -110,48 +154,6 @@ function CriticalPathView({ projectId }) {
       </div>
     )
   }
-
-  // Filter activities based on current filters
-  const filteredActivities = useMemo(() => {
-    if (!criticalPath.activities || !Array.isArray(criticalPath.activities)) return []
-    
-    return criticalPath.activities.filter(activity => {
-      // Critical only filter
-      if (filters.criticalOnly && !activity.is_critical) return false
-      
-      // Search filter
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase()
-        const taskName = ((activity.task_name || activity.name || '') + ' ' + (activity.task_id || activity.id || '')).toLowerCase()
-        if (!taskName.includes(searchLower)) return false
-      }
-      
-      // Float range filter
-      if (filters.floatRange !== 'all') {
-        const float = activity.float || 0
-        if (filters.floatRange === 'zero' && float !== 0) return false
-        if (filters.floatRange === 'low' && (float === 0 || float > 5)) return false
-        if (filters.floatRange === 'high' && float <= 5) return false
-      }
-      
-      return true
-    })
-  }, [criticalPath.activities, filters])
-
-  // Filter critical path sequence
-  const filteredCriticalPath = useMemo(() => {
-    if (!criticalPath.critical_path || !Array.isArray(criticalPath.critical_path)) return []
-    
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase()
-      return criticalPath.critical_path.filter(task => {
-        const taskName = ((task.task_name || task.name || '') + ' ' + (task.task_id || task.id || '')).toLowerCase()
-        return taskName.includes(searchLower)
-      })
-    }
-    
-    return criticalPath.critical_path
-  }, [criticalPath.critical_path, filters.search])
 
   return (
     <div className="critical-path-view">
