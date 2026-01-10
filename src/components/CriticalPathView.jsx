@@ -282,6 +282,28 @@ function CriticalPathView({ projectId }) {
                       <span className="badge-label">Float:</span>
                       <span className="badge-value">{task.float} days</span>
                     </span>
+                    {(task.predecessor_details || task.immediate_predecessors_details || task.immediate_predecessors) && 
+                     (task.predecessor_details?.length > 0 || task.immediate_predecessors_details?.length > 0 || task.immediate_predecessors?.length > 0) && (
+                      <span className="detail-badge predecessor-badge">
+                        <span className="badge-label">Predecessors:</span>
+                        <span className="badge-value">
+                          {(task.predecessor_details || task.immediate_predecessors_details || []).map((pred, idx) => 
+                            pred.task_name || pred.name || pred.task_id || pred.id || task.immediate_predecessors?.[idx] || 'Unknown'
+                          ).join(', ') || task.immediate_predecessors?.join(', ') || '-'}
+                        </span>
+                      </span>
+                    )}
+                    {(task.immediate_successors_details || task.immediate_successors) && 
+                     (task.immediate_successors_details?.length > 0 || task.immediate_successors?.length > 0) && (
+                      <span className="detail-badge successor-badge">
+                        <span className="badge-label">Successors:</span>
+                        <span className="badge-value">
+                          {(task.immediate_successors_details || []).map((succ) => 
+                            succ.task_name || succ.name || succ.task_id || succ.id || 'Unknown'
+                          ).join(', ') || task.immediate_successors?.join(', ') || '-'}
+                        </span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -295,28 +317,143 @@ function CriticalPathView({ projectId }) {
         </div>
       )}
 
-      {/* All Activities Table */}
+      {/* PART B - CPM Tables (Following Guide Format) */}
       {criticalPath.activities && criticalPath.activities.length > 0 && (
-        <div className="activities-table-section">
-          <h3 className="section-subtitle">
-            All Activities 
-            {filters.criticalOnly || filters.floatRange !== 'all' || filters.search 
-              ? ` (${filteredActivities.length} of ${criticalPath.activities.length} shown)` 
-              : ''}
-          </h3>
-          {filteredActivities.length > 0 ? (
+        <div className="cpm-tables-section">
+          <h3 className="section-subtitle">CPM Tables (Following Agreed Schema)</h3>
+          
+          {/* 1. Activity Input Table */}
+          <div className="cpm-table-wrapper">
+            <h4 className="table-title">1. Activity Input Table (Uploaded Data)</h4>
             <div className="table-container">
-              <table className="activities-table">
+              <table className="cpm-table">
                 <thead>
                   <tr>
-                    <th>Task ID</th>
-                    <th>Task Name</th>
-                    <th>Duration</th>
+                    <th>Task_ID</th>
+                    <th>Task_Name</th>
+                    <th>Duration (Days)</th>
+                    <th>Predecessors</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredActivities.map((activity, index) => (
+                    <tr key={index}>
+                      <td>{activity.task_id || activity.id}</td>
+                      <td className="task-name-cell">{activity.task_name || activity.name}</td>
+                      <td>{activity.duration}</td>
+                      <td>
+                        {(activity.predecessor_details || activity.immediate_predecessors_details || activity.immediate_predecessors) && 
+                         (activity.predecessor_details?.length > 0 || activity.immediate_predecessors_details?.length > 0 || activity.immediate_predecessors?.length > 0)
+                          ? (activity.predecessor_details || activity.immediate_predecessors_details || []).map((pred) => 
+                              pred.task_id || pred.id || 'Unknown'
+                            ).join(', ') || activity.immediate_predecessors?.join(', ') || '—'
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 2. Forward Pass Table (Early Dates) */}
+          <div className="cpm-table-wrapper">
+            <h4 className="table-title">2. Forward Pass Table (Early Dates)</h4>
+            <p className="table-note">Rules applied: ES = max(EF of predecessors), EF = ES + Duration</p>
+            <div className="table-container">
+              <table className="cpm-table">
+                <thead>
+                  <tr>
+                    <th>Task_ID</th>
                     <th>ES</th>
                     <th>EF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredActivities.map((activity, index) => (
+                    <tr key={index}>
+                      <td>{activity.task_id || activity.id}</td>
+                      <td>{activity.es}</td>
+                      <td>{activity.ef}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 3. Backward Pass Table (Late Dates) */}
+          <div className="cpm-table-wrapper">
+            <h4 className="table-title">3. Backward Pass Table (Late Dates)</h4>
+            <p className="table-note">Rules applied: LF = min(LS of successors), LS = LF − Duration</p>
+            <div className="table-container">
+              <table className="cpm-table">
+                <thead>
+                  <tr>
+                    <th>Task_ID</th>
                     <th>LS</th>
                     <th>LF</th>
-                    <th>Float</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredActivities.map((activity, index) => (
+                    <tr key={index}>
+                      <td>{activity.task_id || activity.id}</td>
+                      <td>{activity.ls}</td>
+                      <td>{activity.lf}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 4. Float Calculation Table */}
+          <div className="cpm-table-wrapper">
+            <h4 className="table-title">4. Float Calculation Table</h4>
+            <p className="table-note">Rule: Total Float = LS − ES (or LF − EF)</p>
+            <div className="table-container">
+              <table className="cpm-table">
+                <thead>
+                  <tr>
+                    <th>Task_ID</th>
+                    <th>ES</th>
+                    <th>LS</th>
+                    <th>EF</th>
+                    <th>LF</th>
+                    <th>Total Float</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredActivities.map((activity, index) => (
+                    <tr 
+                      key={index}
+                      className={activity.float === 0 ? 'critical-row' : ''}
+                    >
+                      <td>{activity.task_id || activity.id}</td>
+                      <td>{activity.es}</td>
+                      <td>{activity.ls}</td>
+                      <td>{activity.ef}</td>
+                      <td>{activity.lf}</td>
+                      <td className={activity.float === 0 ? 'float-zero' : ''}>
+                        {activity.float}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 5. Critical Path Identification Table */}
+          <div className="cpm-table-wrapper">
+            <h4 className="table-title">5. Critical Path Identification Table</h4>
+            <div className="table-container">
+              <table className="cpm-table">
+                <thead>
+                  <tr>
+                    <th>Task_ID</th>
+                    <th>Total Float</th>
                     <th>Critical</th>
                   </tr>
                 </thead>
@@ -327,12 +464,6 @@ function CriticalPathView({ projectId }) {
                       className={activity.is_critical ? 'critical-row' : ''}
                     >
                       <td>{activity.task_id || activity.id}</td>
-                      <td className="task-name-cell">{activity.task_name || activity.name}</td>
-                      <td>{activity.duration}</td>
-                      <td>{activity.es}</td>
-                      <td>{activity.ef}</td>
-                      <td>{activity.ls}</td>
-                      <td>{activity.lf}</td>
                       <td className={activity.float === 0 ? 'float-zero' : ''}>
                         {activity.float}
                       </td>
@@ -348,11 +479,7 @@ function CriticalPathView({ projectId }) {
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="no-results-message">
-              No activities match the current filters. Try adjusting your search criteria.
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>

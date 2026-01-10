@@ -135,14 +135,6 @@ function AIAnalytics({ projectId }) {
         >
           View Risk Register →
         </button>
-        <button
-          className="nav-button risk-indicators-button"
-          onClick={() => projectId && navigate(`/risk-indicators/${projectId}`)}
-          disabled={!projectId}
-          title="View Risk Indicators"
-        >
-          View Risk Indicators →
-        </button>
       </div>
 
       {/* Tabs */}

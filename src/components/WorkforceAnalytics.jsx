@@ -13,12 +13,14 @@ function WorkforceAnalytics({ data, projectId }) {
   const [selectedView, setSelectedView] = useState(null) // 'total', 'active', 'summary'
   const [daysActive, setDaysActive] = useState(30)
   const [workforceData, setWorkforceData] = useState([])
+  const [workforceTrends, setWorkforceTrends] = useState(null)
   const [showOverUtilizedModal, setShowOverUtilizedModal] = useState(false)
 
   useEffect(() => {
     if (projectId) {
       fetchWorkforceSummary()
       fetchWorkforceData()
+      fetchWorkforceTrends()
     }
   }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -38,6 +40,16 @@ function WorkforceAnalytics({ data, projectId }) {
     } catch (err) {
       console.error('Failed to fetch workforce data:', err)
       setWorkforceData([])
+    }
+  }
+
+  const fetchWorkforceTrends = async () => {
+    try {
+      const trends = await apiService.getWorkforceTrends(projectId)
+      setWorkforceTrends(trends)
+    } catch (err) {
+      console.error('Failed to fetch workforce trends:', err)
+      setWorkforceTrends(null)
     }
   }
 
@@ -109,22 +121,118 @@ function WorkforceAnalytics({ data, projectId }) {
     return <div className="workforce-section">Loading workforce data...</div>
   }
 
-  // Use summary data if available, otherwise fall back to existing data
-  const totalWorkersCount = workforceSummary?.total_workers || Math.round(data.total || 247)
-  const activeWorkersCount = workforceSummary?.active_workers || Math.round(data.active || 203)
+  // Check if trends API has valid data
+  const hasValidTrendsData = workforceTrends && 
+    workforceTrends.daily_trends && 
+    workforceTrends.daily_trends.length > 0 &&
+    workforceTrends.summary && (
+      workforceTrends.summary.total_days > 0 ||
+      (workforceTrends.summary.average_productivity !== null && workforceTrends.summary.average_productivity !== undefined) ||
+      (workforceTrends.summary.average_utilization !== null && workforceTrends.summary.average_utilization !== undefined) ||
+      workforceTrends.summary.total_hours > 0
+    )
+  
+  // Check if we have workforce entries to calculate from
+  const hasWorkforceEntries = workforceData && workforceData.length > 0
+  const hasDataInProps = data && ((data.weeklyData && data.weeklyData.length > 0) || (data.total && data.total > 0))
+  
+  // Calculate metrics from workforce entries (same logic as chart fallback)
+  const calculateMetricsFromEntries = () => {
+    if (!hasWorkforceEntries) return { productivity: null, utilization: null }
+    
+    // Filter entries with valid productivity (hours_worked > 0, as per backend fix)
+    const entriesWithProductivity = workforceData.filter(e => 
+      e.productivity_percentage !== null && 
+      e.productivity_percentage !== undefined && 
+      typeof e.productivity_percentage === 'number' &&
+      isFinite(e.productivity_percentage) &&
+      e.productivity_percentage > 0  // Backend excludes 0-hour entries
+    )
+    
+    // Calculate average productivity (same as chart logic)
+    const avgProd = entriesWithProductivity.length > 0
+      ? entriesWithProductivity.reduce((sum, e) => sum + (e.productivity_percentage || 0), 0) / entriesWithProductivity.length
+      : null
+    
+    // Calculate average utilization (same as productivity - backend guarantees they match)
+    // Use productivity_percentage if available, otherwise use utilization_rate
+    const entriesWithUtilization = workforceData.filter(e => 
+      (e.utilization_rate !== null && e.utilization_rate !== undefined) ||
+      (e.productivity_percentage !== null && e.productivity_percentage !== undefined)
+    )
+    
+    const avgUtil = entriesWithUtilization.length > 0
+      ? entriesWithUtilization.reduce((sum, e) => {
+          // Backend fix: productivity and utilization are now the same value
+          const value = e.productivity_percentage !== null && e.productivity_percentage !== undefined
+            ? e.productivity_percentage
+            : (e.utilization_rate || 0)
+          return sum + (value > 0 ? value : 0)
+        }, 0) / entriesWithUtilization.filter(e => {
+          const value = e.productivity_percentage !== null ? e.productivity_percentage : e.utilization_rate
+          return value !== null && value !== undefined && value > 0
+        }).length
+      : null
+    
+    return { 
+      productivity: avgProd !== null ? Math.round(avgProd) : null, 
+      utilization: avgUtil !== null ? Math.round(avgUtil) : null 
+    }
+  }
+  
+  const calculatedMetrics = calculateMetricsFromEntries()
+  
+  // Use trends API if valid, otherwise use calculated from entries (same as chart)
+  const avgProductivity = hasValidTrendsData && workforceTrends.summary.average_productivity !== null && workforceTrends.summary.average_productivity !== undefined
+    ? workforceTrends.summary.average_productivity
+    : (calculatedMetrics.productivity ?? data?.productivity ?? null)
+  
+  const avgUtilization = hasValidTrendsData && workforceTrends.summary.average_utilization !== null && workforceTrends.summary.average_utilization !== undefined
+    ? workforceTrends.summary.average_utilization
+    : (calculatedMetrics.utilization ?? data?.utilization ?? null)
+  
+  // Check if truly empty (no data at all)
+  const isEmpty = !hasValidTrendsData && !hasWorkforceEntries && !hasDataInProps
+  
+  // Use summary data if available, otherwise use data from props
+  const totalWorkersCount = workforceSummary?.total_workers ?? workforceTrends?.summary?.average_daily_workers ?? data?.total ?? 0
+  const activeWorkersCount = workforceSummary?.active_workers ?? data?.active ?? 0
+  
+  // Format metric values: distinguish between null (no data) and 0 (zero utilization)
+  const formatMetricValue = (value) => {
+    if (value === null || value === undefined) return 'N/A'
+    return `${Math.round(value)}%`
+  }
 
   const metrics = [
-    { label: 'Total Workforce', value: totalWorkersCount, type: 'total', clickable: true },
-    { label: 'Active Workers', value: activeWorkersCount, type: 'active', clickable: true },
-    { label: 'Avg. Productivity', value: `${Math.round(data.productivity || 87)}%`, type: 'productivity', clickable: false },
-    { label: 'Utilization Rate', value: `${Math.round(data.utilization || 92)}%`, type: 'utilization', clickable: false },
+    { label: 'Total Workforce', value: totalWorkersCount || 0, type: 'total', clickable: true },
+    { label: 'Active Workers', value: activeWorkersCount || 0, type: 'active', clickable: true },
+    { label: 'Avg. Productivity', value: formatMetricValue(avgProductivity), type: 'productivity', clickable: false, rawValue: avgProductivity },
+    { label: 'Utilization Rate', value: formatMetricValue(avgUtilization), type: 'utilization', clickable: false, rawValue: avgUtilization },
   ]
+  
+  // Track data source for indicator
+  const dataSource = hasValidTrendsData ? 'trends-api' : (hasWorkforceEntries ? 'workforce-entries' : (hasDataInProps ? 'transformed' : 'none'))
 
   // ✅ Use time-series data (now date-based from API)
-  // Chart data can have either 'week' or 'date' field
-  const chartData = data.weeklyData && data.weeklyData.length > 0 
-    ? data.weeklyData.map(item => ({
-        // Use date if available, otherwise use week
+  // Chart data uses same priority as metrics: Trends API → Workforce Entries → Transformed
+  let chartData = []
+  let chartDataSource = 'none'
+  
+  if (hasValidTrendsData && workforceTrends.daily_trends.length > 0) {
+    // Use trends API data directly (same source as metrics when valid)
+    chartDataSource = 'trends-api'
+    chartData = workforceTrends.daily_trends.map((trend, index) => ({
+      label: new Date(trend.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      week: `Week ${Math.floor(index / 7) + 1}`,
+      date: trend.date,
+      productivity: Math.round(trend.average_productivity || 0),
+      utilization: Math.round(trend.average_utilization || trend.utilization || 0),
+    }))
+  } else if (data?.weeklyData && data.weeklyData.length > 0) {
+    // Use transformed data from props (fallback, same as metrics calculation)
+    chartDataSource = 'transformed'
+    chartData = data.weeklyData.map(item => ({
         label: item.date 
           ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
           : item.week || 'Week',
@@ -133,15 +241,7 @@ function WorkforceAnalytics({ data, projectId }) {
         productivity: item.productivity || 0,
         utilization: item.utilization || 0,
       }))
-    : [
-        { week: 'Week 1', productivity: 87, utilization: 92 },
-        { week: 'Week 2', productivity: 89, utilization: 94 },
-        { week: 'Week 3', productivity: 85, utilization: 90 },
-        { week: 'Week 4', productivity: 88, utilization: 93 },
-        { week: 'Week 5', productivity: 86, utilization: 91 },
-        { week: 'Week 6', productivity: 90, utilization: 95 },
-        { week: 'Week 7', productivity: 87, utilization: 92 },
-      ]
+  }
 
   return (
     <div className="workforce-section">
@@ -193,7 +293,23 @@ function WorkforceAnalytics({ data, projectId }) {
       })()}
 
       <div className="workforce-metrics">
-        {metrics.map((metric, index) => (
+        {metrics.map((metric, index) => {
+          // Calculate progress bar width - handle null/0 values properly
+          let progressWidth = 0
+          if (metric.rawValue !== null && metric.rawValue !== undefined && typeof metric.rawValue === 'number') {
+            // For productivity/utilization: use value directly (already a percentage)
+            if (metric.type === 'productivity' || metric.type === 'utilization') {
+              progressWidth = Math.min(metric.rawValue, 100)
+            } else {
+              // For count metrics: normalize to reasonable scale
+              progressWidth = Math.min((metric.value / 300) * 100, 100)
+            }
+          } else if (metric.type === 'total' || metric.type === 'active') {
+            // Count metrics: use actual value
+            progressWidth = Math.min((metric.value / 300) * 100, 100)
+          }
+          
+          return (
           <div 
             key={index} 
             className={`workforce-metric-card ${metric.clickable ? 'clickable' : ''}`}
@@ -205,16 +321,18 @@ function WorkforceAnalytics({ data, projectId }) {
             <div className="metric-progress-bar">
               <div 
                 className="metric-progress-fill" 
-                style={{ width: `${typeof metric.value === 'number' ? Math.min((metric.value / 300) * 100, 100) : Math.min(parseInt(metric.value), 100)}%` }}
+                  style={{ width: `${progressWidth}%` }}
               ></div>
             </div>
             {metric.clickable && <div className="click-hint">Click to view details</div>}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="workforce-chart-container">
         {chartData && chartData.length > 0 ? (
+          <>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 60, bottom: 70 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
@@ -265,9 +383,40 @@ function WorkforceAnalytics({ data, projectId }) {
             />
           </LineChart>
         </ResponsiveContainer>
+          </>
+        ) : isEmpty ? (
+          <div className="workforce-empty-state">
+            <div className="empty-state-icon">📊</div>
+            <h3>No Workforce Data Available</h3>
+            <p>No workforce entries found for the selected period.</p>
+            <p className="empty-state-hint">
+              Add workforce entries to see productivity and utilization trends over time.
+            </p>
+            {(workforceTrends?.period || workforceSummary?.period) && (
+              <div className="empty-state-period">
+                <strong>Period:</strong> {
+                  workforceTrends?.period 
+                    ? `${new Date(workforceTrends.period.start_date).toLocaleDateString()} - ${new Date(workforceTrends.period.end_date).toLocaleDateString()} (${workforceTrends.period.days} days)`
+                    : workforceSummary?.period
+                      ? `${new Date(workforceSummary.period.start_date).toLocaleDateString()} - ${new Date(workforceSummary.period.end_date).toLocaleDateString()} (${workforceSummary.period.days} days)`
+                      : 'N/A'
+                }
+              </div>
+            )}
+            {workforceTrends?.summary && (
+              <div className="empty-state-summary" style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af' }}>
+                Summary: {workforceTrends.summary.total_days || 0} days, {workforceTrends.summary.total_hours || 0} hours, {workforceTrends.summary.average_daily_workers || 0} avg workers/day
+              </div>
+            )}
+          </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280' }}>
-            No chart data available
+          <div className="workforce-empty-state">
+            <div className="empty-state-icon">📈</div>
+            <h3>No Chart Data Available</h3>
+            <p>No time-series data available to display.</p>
+            <p className="empty-state-hint">
+              Chart data requires workforce entries with valid dates and productivity/utilization values.
+            </p>
           </div>
         )}
       </div>

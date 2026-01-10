@@ -18,8 +18,7 @@ const RiskRegister = ({ projectId }) => {
 
   useEffect(() => {
     if (projectId) {
-      fetchRisks()
-      fetchSummary()
+      fetchRisks() // This now includes summary in response
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, filters])
@@ -37,14 +36,41 @@ const RiskRegister = ({ projectId }) => {
       
       const data = await apiService.getRisks(projectId, params)
       
-      // Handle different response formats
+      // Handle different response formats - NEW: API now returns { risks: [...], summary: {...}, pagination: {...} }
       let risksArray = []
+      let responseSummary = null
+      
+      console.log('📥 Raw API response:', data)
+      
       if (Array.isArray(data)) {
+        // Legacy format: just an array
+        console.log('⚠️ Using legacy format (array only)')
         risksArray = data
-      } else if (data && Array.isArray(data.risks)) {
-        risksArray = data.risks
-      } else if (data && Array.isArray(data.data)) {
-        risksArray = data.data
+      } else if (data && typeof data === 'object') {
+        // New format: { risks: [...], summary: {...}, pagination: {...} }
+        if (Array.isArray(data.risks)) {
+          risksArray = data.risks
+          console.log(`✅ Found ${risksArray.length} risks in response`)
+        } else if (Array.isArray(data.data)) {
+          risksArray = data.data
+          console.log(`✅ Found ${risksArray.length} risks in data field`)
+        }
+        
+        // Extract summary from response if available
+        if (data.summary && typeof data.summary === 'object') {
+          responseSummary = data.summary
+          console.log('📊 Risk summary from API:', JSON.stringify(responseSummary, null, 2))
+          console.log('📊 Summary details:', {
+            total_risks: responseSummary.total_risks,
+            has_by_priority: !!responseSummary.by_priority,
+            high: responseSummary.by_priority?.high,
+            medium: responseSummary.by_priority?.medium,
+            low: responseSummary.by_priority?.low,
+            avg_score: responseSummary.average_risk_score
+          })
+        } else {
+          console.warn('⚠️ No summary found in API response')
+        }
       }
       
       // Remove duplicates based on risk ID (keep first occurrence)
@@ -72,10 +98,20 @@ const RiskRegister = ({ projectId }) => {
       }
       
       setRisks(uniqueRisks)
+      
+      // Update summary from API response if available
+      if (responseSummary) {
+        setSummary(responseSummary)
+      } else {
+        // Fallback: try to fetch summary separately if not in response
+        fetchSummary()
+      }
     } catch (err) {
       console.error('Failed to fetch risks:', err)
       setError('Failed to load risks. Please try again.')
       setRisks([])
+      // Try to fetch summary even if risks fail
+      fetchSummary()
     } finally {
       setLoading(false)
     }
@@ -84,13 +120,58 @@ const RiskRegister = ({ projectId }) => {
   const fetchSummary = async () => {
     try {
       const data = await apiService.getRiskSummary(projectId)
+      console.log('📊 Summary from separate API call:', data)
       // Only update if we got valid data
-      if (data && typeof data.total_risks === 'number') {
-        setSummary(data)
+      if (data && typeof data === 'object') {
+        if (typeof data.total_risks === 'number') {
+          setSummary(data)
+          console.log('✅ Set summary from separate API:', data)
+        } else {
+          console.warn('⚠️ Summary API returned invalid data (no total_risks):', data)
+        }
+      } else {
+        console.warn('⚠️ Summary API returned non-object:', data)
       }
     } catch (err) {
-      console.error('Failed to fetch risk summary:', err)
+      console.error('❌ Failed to fetch risk summary:', err)
     }
+  }
+
+  // Calculate priority counts from actual risks data (fallback if summary not available)
+  const calculatePriorityCounts = () => {
+    if (!risks || risks.length === 0) {
+      return {
+        total: 0,
+        high: 0,
+        medium: 0,
+        low: 0
+      }
+    }
+
+    const counts = {
+      total: risks.length,
+      high: 0,
+      medium: 0,
+      low: 0
+    }
+
+    risks.forEach(risk => {
+      const score = risk.risk_score || 0
+      // High Priority: risk_score >= 0.7 (High/Critical)
+      if (score >= 0.7) {
+        counts.high++
+      }
+      // Medium Priority: 0.5 <= risk_score < 0.7 (Medium-High)
+      else if (score >= 0.5) {
+        counts.medium++
+      }
+      // Low Priority: risk_score < 0.5
+      else {
+        counts.low++
+      }
+    })
+
+    return counts
   }
 
   const handleCreateRisk = async (riskData) => {
@@ -104,9 +185,9 @@ const RiskRegister = ({ projectId }) => {
         min_risk_score: null
       })
       // Wait a bit for backend to process, then refresh
+      // fetchRisks now includes summary in response, so no need to call fetchSummary separately
       setTimeout(async () => {
         await fetchRisks()
-        await fetchSummary()
       }, 1000)
     } catch (err) {
       console.error('Failed to create risk:', err)
@@ -129,9 +210,9 @@ const RiskRegister = ({ projectId }) => {
       })
       
       // Wait a bit for backend to process, then refresh
+      // fetchRisks now includes summary in response, so no need to call fetchSummary separately
       setTimeout(async () => {
         await fetchRisks()
-        await fetchSummary()
         if (detectedCount > 0) {
           alert(`Auto-detected ${detectedCount} new risk${detectedCount > 1 ? 's' : ''}.`)
         } else {
@@ -193,28 +274,74 @@ const RiskRegister = ({ projectId }) => {
         </div>
       </div>
 
-      {summary && (
-        <div className="risk-summary-cards">
-          <div className="summary-card">
-            <div className="summary-value">{summary.total_risks || 0}</div>
-            <div className="summary-label">Total Risks</div>
-          </div>
-          <div className="summary-card">
-            <div className="summary-value">{summary.by_priority?.high || 0}</div>
-            <div className="summary-label">High Priority</div>
-          </div>
-          <div className="summary-card">
-            <div className="summary-value">{summary.by_priority?.medium || 0}</div>
-            <div className="summary-label">Medium Priority</div>
-          </div>
-          <div className="summary-card">
-            <div className="summary-value">
-              {summary.average_risk_score ? (summary.average_risk_score * 100).toFixed(1) : 0}%
+      {(() => {
+        // Use summary from API response if available (preferred), otherwise calculate from risks
+        // Check if summary exists and has the expected structure (by_priority object exists)
+        // Note: high/medium/low can be 0, so we check for the object existence, not the values
+        const useApiSummary = summary && 
+                              typeof summary === 'object' && 
+                              summary.by_priority && 
+                              typeof summary.by_priority === 'object' &&
+                              ('high' in summary.by_priority || 'medium' in summary.by_priority || 'low' in summary.by_priority)
+        
+        console.log('🔍 Summary check:', {
+          hasSummary: !!summary,
+          summaryType: typeof summary,
+          hasByPriority: !!(summary && summary.by_priority),
+          byPriorityType: summary && summary.by_priority ? typeof summary.by_priority : 'N/A',
+          useApiSummary,
+          summaryValue: summary
+        })
+        
+        let displaySummary
+        if (useApiSummary) {
+          // Use API summary (from risks API response) - PREFERRED
+          displaySummary = {
+            total_risks: summary.total_risks ?? 0,
+            high_priority: summary.by_priority?.high ?? 0,
+            medium_priority: summary.by_priority?.medium ?? 0,
+            low_priority: summary.by_priority?.low ?? 0,
+            average_risk_score: summary.average_risk_score ?? 0
+          }
+          console.log('✅ Using API summary:', displaySummary)
+        } else {
+          // Fallback: Calculate from actual risks data
+          const calculatedCounts = calculatePriorityCounts()
+          displaySummary = {
+            total_risks: calculatedCounts.total,
+            high_priority: calculatedCounts.high,
+            medium_priority: calculatedCounts.medium,
+            low_priority: calculatedCounts.low,
+            average_risk_score: risks.length > 0 
+              ? risks.reduce((sum, risk) => sum + (risk.risk_score || 0), 0) / risks.length 
+              : 0
+          }
+          console.log('⚠️ Using calculated summary (fallback):', displaySummary)
+        }
+
+        return (
+          <div className="risk-summary-cards">
+            <div className="summary-card">
+              <div className="summary-value">{displaySummary.total_risks}</div>
+              <div className="summary-label">Total Risks</div>
             </div>
-            <div className="summary-label">Avg Risk Score</div>
+            <div className="summary-card">
+              <div className="summary-value">{displaySummary.high_priority}</div>
+              <div className="summary-label">High Priority</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-value">{displaySummary.medium_priority}</div>
+              <div className="summary-label">Medium Priority</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-value">
+                {(displaySummary.average_risk_score * 100).toFixed(1)}%
+              </div>
+              <div className="summary-label">Avg Risk Score</div>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <div className="risk-filters">
         <select

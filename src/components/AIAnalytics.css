@@ -128,10 +128,6 @@
   background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
 }
 
-.risk-indicators-button {
-  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-
 /* Tabs */
 .ai-tabs {
   display: flex;

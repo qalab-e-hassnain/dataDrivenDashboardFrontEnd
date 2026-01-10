@@ -73,8 +73,16 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
   const validateForm = () => {
     const newErrors = {}
 
+    // Validate name (required, not empty/whitespace, max 200 chars)
     if (!formData.name.trim()) {
       newErrors.name = 'Project name is required'
+    } else if (formData.name.trim().length > 200) {
+      newErrors.name = 'Project name cannot exceed 200 characters'
+    }
+
+    // Validate description max length (if provided)
+    if (formData.description && formData.description.length > 5000) {
+      newErrors.description = 'Description cannot exceed 5000 characters'
     }
 
     // Validate dates if provided
@@ -82,7 +90,7 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
       const start = new Date(formData.start_date)
       const end = new Date(formData.end_date)
       if (end < start) {
-        newErrors.end_date = 'End date must be after start date'
+        newErrors.end_date = 'End date cannot be earlier than start date'
       }
     }
 
@@ -90,17 +98,27 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
       const start = new Date(formData.start_date)
       const plannedEnd = new Date(formData.planned_end_date)
       if (plannedEnd < start) {
-        newErrors.planned_end_date = 'Planned end date must be after start date'
+        newErrors.planned_end_date = 'Planned end date cannot be earlier than start date'
       }
     }
 
-    // Validate numeric fields
-    if (formData.budget && (isNaN(formData.budget) || parseFloat(formData.budget) < 0)) {
-      newErrors.budget = 'Budget must be a positive number'
+    // Validate numeric fields (must be >= 0)
+    if (formData.budget) {
+      const budgetValue = parseFloat(formData.budget)
+      if (isNaN(budgetValue)) {
+        newErrors.budget = 'Budget must be a valid number'
+      } else if (budgetValue < 0) {
+        newErrors.budget = 'Budget cannot be negative'
+      }
     }
 
-    if (formData.estimated_cost && (isNaN(formData.estimated_cost) || parseFloat(formData.estimated_cost) < 0)) {
-      newErrors.estimated_cost = 'Estimated cost must be a positive number'
+    if (formData.estimated_cost) {
+      const costValue = parseFloat(formData.estimated_cost)
+      if (isNaN(costValue)) {
+        newErrors.estimated_cost = 'Estimated cost must be a valid number'
+      } else if (costValue < 0) {
+        newErrors.estimated_cost = 'Estimated cost cannot be negative'
+      }
     }
 
     setErrors(newErrors)
@@ -230,32 +248,149 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
       onClose()
     } catch (error) {
       console.error('Error creating project:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response,
+        request: error.request
+      })
       
-      let errorMessage = 'Failed to create project'
+      const newErrors = {}
+      let generalErrorMessage = ''
       
       if (error.response) {
+        // Server responded with error status
         const status = error.response.status
         const data = error.response.data
+        const detail = data?.detail
+        
+        console.log(`Error response status: ${status}`, data)
         
         if (status === 400) {
-          errorMessage = data?.detail || data?.message || 'Invalid project data'
+          // Validation errors (400 Bad Request)
+          // Handle Pydantic validation errors (array format)
+          if (Array.isArray(detail)) {
+            // Pydantic returns array of validation errors
+            detail.forEach((validationError) => {
+              const field = validationError.loc && validationError.loc.length > 1 
+                ? validationError.loc[validationError.loc.length - 1] 
+                : validationError.loc?.[0] || 'unknown'
+              const fieldName = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+              const message = validationError.msg || validationError.message || 'Invalid value'
+              
+              // Map field names to form field names
+              const formFieldMap = {
+                'name': 'name',
+                'description': 'description',
+                'budget': 'budget',
+                'estimated cost': 'estimated_cost',
+                'estimated_cost': 'estimated_cost',
+                'start date': 'start_date',
+                'start_date': 'start_date',
+                'end date': 'end_date',
+                'end_date': 'end_date',
+                'planned end date': 'planned_end_date',
+                'planned_end_date': 'planned_end_date'
+              }
+              
+              const formField = formFieldMap[field] || formFieldMap[fieldName.toLowerCase()] || field
+              newErrors[formField] = `${fieldName}: ${message}`
+            })
+            
+            // If no field-specific errors extracted, show general message
+            if (Object.keys(newErrors).length === 0) {
+              generalErrorMessage = 'Validation failed. Please check all fields.'
+            }
+          } else if (typeof detail === 'string') {
+            // Single error message string
+            generalErrorMessage = detail
+            
+            // Try to extract field-specific errors from message
+            if (detail.toLowerCase().includes('name')) {
+              if (detail.toLowerCase().includes('empty') || detail.toLowerCase().includes('whitespace')) {
+                newErrors.name = 'Project name cannot be empty or only whitespace'
+              } else if (detail.toLowerCase().includes('exist') || detail.toLowerCase().includes('duplicate')) {
+                newErrors.name = 'A project with this name already exists. Please use a unique project name.'
+              } else if (detail.toLowerCase().includes('200') || detail.toLowerCase().includes('length') || detail.toLowerCase().includes('character')) {
+                newErrors.name = 'Project name cannot exceed 200 characters'
+              } else {
+                newErrors.name = detail
+              }
+            } else if (detail.toLowerCase().includes('date')) {
+              if (detail.toLowerCase().includes('end') && detail.toLowerCase().includes('start')) {
+                newErrors.end_date = detail
+                newErrors.planned_end_date = detail
+              } else if (detail.toLowerCase().includes('end date')) {
+                newErrors.end_date = detail
+              } else {
+                generalErrorMessage = detail
+              }
+            } else if (detail.toLowerCase().includes('budget')) {
+              if (detail.toLowerCase().includes('negative')) {
+                newErrors.budget = 'Budget cannot be negative'
+              } else {
+                newErrors.budget = detail
+              }
+            } else if (detail.toLowerCase().includes('cost')) {
+              if (detail.toLowerCase().includes('negative')) {
+                newErrors.estimated_cost = 'Estimated cost cannot be negative'
+              } else {
+                newErrors.estimated_cost = detail
+              }
+            }
+          } else {
+            // Other format
+            generalErrorMessage = data?.message || detail || 'Invalid project data. Please check all fields.'
+          }
+          
         } else if (status === 409) {
-          errorMessage = 'A project with this name already exists'
+          // Conflict - Duplicate name
+          const duplicateMessage = detail || data?.message || 'A project with this name already exists. Please use a unique project name.'
+          newErrors.name = duplicateMessage
+          generalErrorMessage = duplicateMessage
+          
+        } else if (status === 503) {
+          // Service Unavailable - Database connection/timeout errors
+          generalErrorMessage = 'Service temporarily unavailable. Please try again in a few moments.'
+          
         } else if (status === 500) {
-          errorMessage = 'Server error. Please try again later.'
+          // Internal Server Error - Generic database or server errors
+          generalErrorMessage = detail || data?.message || 'Server error occurred. Please try again later.'
+          
         } else {
-          errorMessage = data?.detail || data?.message || `Failed to create project: ${status} ${error.response.statusText}`
+          // Other error statuses
+          generalErrorMessage = detail || data?.message || `Failed to create project: ${error.response.statusText || status}`
         }
+        
       } else if (error.request) {
-        errorMessage = 'Network error. Unable to connect to server.'
+        // Request was made but no response received (timeout, network error, CORS)
+        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+          generalErrorMessage = 'Request timed out. The server may be busy. Please try again.'
+        } else if (error.message?.includes('Network Error') || error.message?.includes('Failed to fetch')) {
+          generalErrorMessage = 'Network error. Unable to connect to server. Please check your internet connection.'
+        } else {
+          generalErrorMessage = 'Unable to reach the server. Please try again later.'
+        }
+        
       } else {
-        errorMessage = error.message || 'Failed to create project'
+        // Error setting up the request
+        generalErrorMessage = error.message || 'Failed to create project. Please try again.'
       }
-
-      setErrors({ submit: errorMessage })
       
+      // Set errors (field-specific errors take precedence, then general message)
+      if (Object.keys(newErrors).length > 0) {
+        if (generalErrorMessage && !newErrors.submit) {
+          newErrors.submit = generalErrorMessage
+        }
+        setErrors(newErrors)
+      } else {
+        setErrors({ submit: generalErrorMessage || 'Failed to create project. Please try again.' })
+      }
+      
+      // Show error toast if callback provided
       if (onUploadSuccess) {
-        onUploadSuccess(errorMessage, 'error')
+        const displayMessage = Object.values(newErrors).join(' ') || generalErrorMessage || 'Failed to create project'
+        onUploadSuccess(displayMessage, 'error')
       }
     } finally {
       setCreating(false)
@@ -311,11 +446,15 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
               value={formData.name}
               onChange={handleInputChange}
               className={`form-input ${errors.name ? 'error' : ''}`}
-              placeholder="Enter project name"
+              placeholder="Enter project name (max 200 characters)"
+              maxLength={200}
               disabled={creating || uploading}
               required
             />
             {errors.name && <span className="error-message">{errors.name}</span>}
+            {formData.name.length > 0 && (
+              <span className="character-count">{formData.name.length}/200</span>
+            )}
           </div>
 
           <div className="form-group">
@@ -327,11 +466,16 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
               name="description"
               value={formData.description}
               onChange={handleInputChange}
-              className="form-input form-textarea"
-              placeholder="Enter project description (optional)"
+              className={`form-input form-textarea ${errors.description ? 'error' : ''}`}
+              placeholder="Enter project description (optional, max 5000 characters)"
+              maxLength={5000}
               rows="3"
               disabled={creating || uploading}
             />
+            {errors.description && <span className="error-message">{errors.description}</span>}
+            {formData.description.length > 0 && (
+              <span className="character-count">{formData.description.length}/5000</span>
+            )}
           </div>
 
           <div className="form-row">

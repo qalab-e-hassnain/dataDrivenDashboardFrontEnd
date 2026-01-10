@@ -121,6 +121,61 @@
   height: 250px !important;
 }
 
+/* Empty State */
+.workforce-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 250px;
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.empty-state-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.workforce-empty-state h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 8px 0;
+}
+
+.workforce-empty-state p {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.empty-state-hint {
+  font-size: 13px;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 8px !important;
+}
+
+.empty-state-period {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.empty-state-period strong {
+  color: #374151;
+  margin-right: 4px;
+}
+
 .workforce-navigation {
   display: flex;
   gap: 10px;

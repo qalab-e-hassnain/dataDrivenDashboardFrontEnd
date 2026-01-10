@@ -13,7 +13,9 @@ const ResourceLeveling = ({ projectId }) => {
   const [options, setOptions] = useState({
     maxHoursPerDay: 8,
     maxHoursPerWeek: 40,
-    considerAvailability: true
+    considerAvailability: true,
+    autoApply: false, // Don't apply changes by default (show suggestions first)
+    protectCritical: true // Protect critical tasks by default
   })
 
   useEffect(() => {
@@ -49,13 +51,31 @@ const ResourceLeveling = ({ projectId }) => {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiService.applyResourceLeveling(projectId, options)
+      // Apply Resource Leveling
+      const data = await apiService.applyResourceLevelingV2(projectId, {
+        ...options,
+        autoApply: options.autoApply,
+        protectCritical: options.protectCritical
+      })
+      
+      console.log('📊 Resource Leveling Response:', data)
+      console.log('📊 CPM Tables:', data.cpm_tables)
+      console.log('📊 Resource Leveling Tables:', data.resource_leveling_tables)
+      
       setResult(data)
       // Refresh forecast after leveling
       fetchUtilizationForecast()
+      // Refresh tasks to get updated schedule
+      fetchTasks()
+      
+      // Show info about unresolved conflicts if any
+      if (data.unresolved_conflicts && data.unresolved_conflicts > 0) {
+        console.warn(`Resource leveling completed but ${data.unresolved_conflicts} conflicts could not be resolved (only critical tasks affected)`)
+      }
     } catch (err) {
       console.error('Failed to apply resource leveling:', err)
-      setError('Failed to apply resource leveling. Please try again.')
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to apply resource leveling. Please try again.'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -69,6 +89,8 @@ const ResourceLeveling = ({ projectId }) => {
         return '#28a745'
       case 'underutilized':
         return '#ffc107'
+      case 'no_resources':
+        return '#6c757d'
       default:
         return '#6c757d'
     }
@@ -116,8 +138,14 @@ const ResourceLeveling = ({ projectId }) => {
           role: item.role,
           needed: item.needed_hours || 0,
           available: item.available_hours || 0,
-          utilization: item.utilization_rate || item.utilization_percentage || 0,
+          utilization: item.utilization_rate !== null && item.utilization_rate !== undefined 
+            ? item.utilization_rate 
+            : (item.utilization_percentage !== null && item.utilization_percentage !== undefined 
+              ? item.utilization_percentage 
+              : null), // Handle null utilization (no resources)
           status: item.status || 'optimal',
+          statusMessage: item.status_message || null,
+          formula: item.formula || null,
           isActualDate: item.is_actual_date || false, // Highlight actual dates
           contributingTasks: item.contributing_tasks || [] // Use API-provided contributing tasks
         }
@@ -190,18 +218,23 @@ const ResourceLeveling = ({ projectId }) => {
       <div className="resource-leveling-header">
         <h2>Resource Leveling</h2>
         <p className="resource-leveling-description">
-          Analyze and optimize resource allocation to identify conflicts and suggest adjustments.
+          After CPM calculates the critical path, resource leveling adjusts the schedule to ensure no worker is assigned to more activities than available, while respecting task dependencies. The system detects overallocations, adjusts start dates, and recalculates the schedule (CPM → Detect → Adjust → Recalculate).
         </p>
       </div>
 
       <div className="resource-leveling-options">
         <div className="options-card">
-          <h3>Leveling Options</h3>
-          <div className="options-form">
-            <div className="form-group">
-              <label>
-                Max Hours Per Day:
+          <h3>Resource Leveling Configuration</h3>
+          
+          {/* Main Options Grid */}
+          <div className="options-main-grid">
+            <div className="options-row">
+              <div className="form-group">
+                <label htmlFor="maxHoursPerDay">
+                  Max Hours Per Day
+                </label>
                 <input
+                  id="maxHoursPerDay"
                   type="number"
                   min="1"
                   max="24"
@@ -213,13 +246,15 @@ const ResourceLeveling = ({ projectId }) => {
                       maxHoursPerDay: parseFloat(e.target.value) || 8
                     })
                   }
+                  disabled={loading}
                 />
-              </label>
-            </div>
-            <div className="form-group">
-              <label>
-                Max Hours Per Week:
+              </div>
+              <div className="form-group">
+                <label htmlFor="maxHoursPerWeek">
+                  Max Hours Per Week
+                </label>
                 <input
+                  id="maxHoursPerWeek"
                   type="number"
                   min="1"
                   max="168"
@@ -231,62 +266,177 @@ const ResourceLeveling = ({ projectId }) => {
                       maxHoursPerWeek: parseFloat(e.target.value) || 40
                     })
                   }
+                  disabled={loading}
                 />
-              </label>
-            </div>
-            <div className="form-group checkbox-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={options.considerAvailability}
-                  onChange={(e) =>
-                    setOptions({
-                      ...options,
-                      considerAvailability: e.target.checked
-                    })
-                  }
-                />
-                Consider Workforce Availability
-              </label>
+              </div>
             </div>
           </div>
+
+          {/* Advanced Options Cards */}
+          <div className="advanced-options-section">
+            <h4 className="advanced-options-title">Advanced Options</h4>
+            <div className="advanced-options-grid">
+              {/* Auto Apply Option */}
+              <div className={`option-card ${options.autoApply ? 'option-card-warning' : 'option-card-info'}`}>
+                <label className="option-card-label">
+                  <input
+                    type="checkbox"
+                    checked={options.autoApply}
+                    onChange={(e) =>
+                      setOptions({
+                        ...options,
+                        autoApply: e.target.checked
+                      })
+                    }
+                    disabled={loading}
+                    className="option-checkbox"
+                  />
+                  <div className="option-content">
+                    <div className="option-header">
+                      <span className="option-icon">{options.autoApply ? '⚠️' : '💡'}</span>
+                      <strong className="option-title">Auto Apply Changes</strong>
+                    </div>
+                    <p className="option-description">
+                      {options.autoApply 
+                        ? 'Changes will be saved to the database. Task dates will be permanently updated.'
+                        : 'Only suggest changes without saving. Review adjustments before applying.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Protect Critical Tasks Option */}
+              <div className={`option-card ${options.protectCritical ? 'option-card-success' : 'option-card-warning'}`}>
+                <label className="option-card-label">
+                  <input
+                    type="checkbox"
+                    checked={options.protectCritical}
+                    onChange={(e) =>
+                      setOptions({
+                        ...options,
+                        protectCritical: e.target.checked
+                      })
+                    }
+                    disabled={loading}
+                    className="option-checkbox"
+                  />
+                  <div className="option-content">
+                    <div className="option-header">
+                      <span className="option-icon">{options.protectCritical ? '🛡️' : '⚠️'}</span>
+                      <strong className="option-title">Protect Critical Tasks</strong>
+                    </div>
+                    <p className="option-description">
+                      {options.protectCritical 
+                        ? 'Critical tasks will not be delayed unless unavoidable. Maintains critical path integrity.'
+                        : 'Critical tasks may be delayed if necessary. May extend project timeline.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Consider Availability Option */}
+              <div className={`option-card ${options.considerAvailability ? 'option-card-info' : 'option-card-default'}`}>
+                <label className="option-card-label">
+                  <input
+                    type="checkbox"
+                    checked={options.considerAvailability}
+                    onChange={(e) =>
+                      setOptions({
+                        ...options,
+                        considerAvailability: e.target.checked
+                      })
+                    }
+                    disabled={loading}
+                    className="option-checkbox"
+                  />
+                  <div className="option-content">
+                    <div className="option-header">
+                      <span className="option-icon">👥</span>
+                      <strong className="option-title">Consider Workforce Availability</strong>
+                    </div>
+                    <p className="option-description">
+                      {options.considerAvailability 
+                        ? 'Account for actual workforce availability when leveling resources.'
+                        : 'Leveling based on theoretical capacity only.'}
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Button */}
           <button
             onClick={applyLeveling}
             disabled={loading}
             className="btn-apply-leveling"
           >
-            {loading ? 'Analyzing...' : 'Apply Resource Leveling'}
+            {loading 
+              ? 'Applying Resource Leveling...' 
+              : 'Apply Resource Leveling'}
           </button>
+
+          {/* Status Info */}
+          <div className={`workflow-info ${options.autoApply ? 'workflow-info-warning' : 'workflow-info-info'}`}>
+            <div className="workflow-info-icon">
+              {options.autoApply ? '⚠️' : 'ℹ️'}
+            </div>
+            <div className="workflow-info-content">
+              <strong>Workflow Status:</strong>
+              <p>
+                {options.autoApply 
+                  ? 'Changes will be APPLIED and SAVED to the database. Task dates will be permanently updated.'
+                  : 'This will detect overallocations and suggest adjustments. Changes will NOT be saved (review mode).'}
+              </p>
+              {options.protectCritical && (
+                <p className="workflow-info-detail">
+                  🛡️ Critical tasks will be protected from delays unless unavoidable.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       {error && <div className="resource-leveling-error">{error}</div>}
 
-      {result && (
+          {result && (
         <div className="resource-leveling-results">
           <div className="results-summary">
             <h3>Leveling Results</h3>
             <div className="summary-cards">
               <div className="summary-card conflict-card">
-                <div className="summary-value">{result.summary?.total_conflicts || 0}</div>
+                <div className="summary-value">{result.summary?.total_conflicts || result.total_conflicts || 0}</div>
                 <div className="summary-label">Total Conflicts</div>
               </div>
               <div className="summary-card days-card">
-                <div className="summary-value">{result.summary?.conflict_days || 0}</div>
+                <div className="summary-value">{result.summary?.conflict_days || result.conflict_days || 0}</div>
                 <div className="summary-label">Conflict Days</div>
               </div>
+              {result.unresolved_conflicts !== undefined && (
+                <div className="summary-card unresolved-card" style={{ background: '#fff3cd', border: '2px solid #ffc107' }}>
+                  <div className="summary-value" style={{ color: '#856404' }}>{result.unresolved_conflicts}</div>
+                  <div className="summary-label" style={{ color: '#856404' }}>Unresolved (Critical Only)</div>
+                </div>
+              )}
               <div className="summary-card hours-card">
                 <div className="summary-value">
-                  {result.summary?.total_shortage_hours?.toFixed(1) || 0}
+                  {(result.summary?.total_shortage_hours || result.total_shortage_hours || 0).toFixed(1)}
                 </div>
                 <div className="summary-label">Shortage Hours</div>
               </div>
               <div className="summary-card roles-card">
                 <div className="summary-value">
-                  {result.summary?.affected_roles?.length || 0}
+                  {(result.summary?.affected_roles || result.affected_roles || []).length}
                 </div>
                 <div className="summary-label">Affected Roles</div>
               </div>
+              {result.adjustments_applied !== undefined && (
+                <div className="summary-card adjustments-card" style={{ background: '#d4edda', border: '2px solid #28a745' }}>
+                  <div className="summary-value" style={{ color: '#155724' }}>{result.adjustments_applied}</div>
+                  <div className="summary-label" style={{ color: '#155724' }}>Tasks Leveled</div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -404,7 +554,11 @@ const ResourceLeveling = ({ projectId }) => {
                     />
                     <Tooltip 
                       formatter={(value, name) => {
-                        if (name === 'utilization') return `${value.toFixed(1)}%`
+                        if (name === 'utilization') {
+                          // Handle null utilization
+                          if (value === null || value === undefined) return 'No resources'
+                          return `${value.toFixed(1)}%`
+                        }
                         if (name === 'needed' || name === 'available') return `${value.toFixed(1)} hrs`
                         return value
                       }}
@@ -446,11 +600,23 @@ const ResourceLeveling = ({ projectId }) => {
                               <div key={index} style={{ marginBottom: '4px', color: entry.color }}>
                                 <strong>{entry.name}:</strong> {
                                   entry.name === 'utilization' 
-                                    ? `${entry.value.toFixed(1)}%`
+                                    ? (entry.value === null || entry.value === undefined 
+                                        ? 'No resources' 
+                                        : `${entry.value.toFixed(1)}%`)
                                     : `${entry.value.toFixed(1)} hrs`
                                 }
                               </div>
                             ))}
+                            {dataPoint.statusMessage && (
+                              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb', fontSize: '11px', color: '#666' }}>
+                                <strong>Status:</strong> {dataPoint.statusMessage}
+                              </div>
+                            )}
+                            {dataPoint.formula && (
+                              <div style={{ marginTop: '4px', fontSize: '10px', color: '#999', fontStyle: 'italic' }}>
+                                Formula: {dataPoint.formula}
+                              </div>
+                            )}
                             {contributingTasks.length > 0 && (
                               <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
                                 <div style={{ fontSize: '11px', color: '#666', marginBottom: '6px' }}>
@@ -786,9 +952,403 @@ const ResourceLeveling = ({ projectId }) => {
             </div>
           )}
 
+          {/* PART B — CPM Tables (Following Guide Format) - From API */}
+          {result && result.cpm_tables && (
+            <div className="cpm-tables-section" style={{ marginTop: '32px', padding: '24px', background: '#f9fafb', borderRadius: '12px', border: '2px solid #e5e7eb' }}>
+              <h3 className="section-subtitle" style={{ color: '#111827', marginBottom: '24px' }}>
+                PART B — CPM Tables (Following Agreed Schema)
+              </h3>
+              
+              {/* 1. Activity Input Table */}
+              {result.cpm_tables.activity_input_table && result.cpm_tables.activity_input_table.length > 0 && (
+                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                  <h4 className="table-title">1. Activity Input Table (Uploaded Data)</h4>
+                  <div className="table-container">
+                    <table className="resource-table">
+                      <thead>
+                        <tr>
+                          <th>Task_ID</th>
+                          <th>Task_Name</th>
+                          <th>Duration (Days)</th>
+                          <th>Predecessors</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.cpm_tables.activity_input_table.map((row, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{row.task_id || row.task_ID}</strong></td>
+                            <td className="task-name-cell">{row.task_name || row.task_Name}</td>
+                            <td>{row.duration || row.duration_days || row.Duration || 'N/A'}</td>
+                            <td>
+                              {row.predecessors 
+                                ? (Array.isArray(row.predecessors) ? row.predecessors.join(', ') : row.predecessors)
+                                : (row.Predecessors 
+                                  ? (Array.isArray(row.Predecessors) ? row.Predecessors.join(', ') : row.Predecessors)
+                                  : '—')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="table-note">
+                    <strong>Rules applied:</strong> Tasks are listed with their dependencies (predecessors).
+                  </p>
+                </div>
+              )}
+
+              {/* 2. Forward Pass Table */}
+              {result.cpm_tables.forward_pass_table && result.cpm_tables.forward_pass_table.length > 0 && (
+                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                  <h4 className="table-title">2. Forward Pass Table (Early Dates)</h4>
+                  <div className="table-container">
+                    <table className="resource-table">
+                      <thead>
+                        <tr>
+                          <th>Task_ID</th>
+                          <th>ES</th>
+                          <th>EF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.cpm_tables.forward_pass_table.map((row, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{row.task_id || row.task_ID}</strong></td>
+                            <td>{row.es || row.ES !== undefined ? row.ES : row.es}</td>
+                            <td>{row.ef || row.EF !== undefined ? row.EF : row.ef}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="table-note">
+                    <strong>Rules applied:</strong> ES = max(EF of predecessors), EF = ES + Duration
+                  </p>
+                </div>
+              )}
+
+              {/* 3. Backward Pass Table */}
+              {result.cpm_tables.backward_pass_table && result.cpm_tables.backward_pass_table.length > 0 && (
+                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                  <h4 className="table-title">3. Backward Pass Table (Late Dates)</h4>
+                  <div className="table-container">
+                    <table className="resource-table">
+                      <thead>
+                        <tr>
+                          <th>Task_ID</th>
+                          <th>LS</th>
+                          <th>LF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.cpm_tables.backward_pass_table.map((row, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{row.task_id || row.task_ID}</strong></td>
+                            <td>{row.ls || row.LS !== undefined ? row.LS : row.ls}</td>
+                            <td>{row.lf || row.LF !== undefined ? row.LF : row.lf}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="table-note">
+                    <strong>Rules applied:</strong> LF = min(LS of successors), LS = LF − Duration
+                  </p>
+                </div>
+              )}
+
+              {/* 4. Float Calculation Table */}
+              {result.cpm_tables.float_calculation_table && result.cpm_tables.float_calculation_table.length > 0 && (
+                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                  <h4 className="table-title">4. Float Calculation Table</h4>
+                  <div className="table-container">
+                    <table className="resource-table">
+                      <thead>
+                        <tr>
+                          <th>Task_ID</th>
+                          <th>ES</th>
+                          <th>LS</th>
+                          <th>EF</th>
+                          <th>LF</th>
+                          <th>Total Float</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.cpm_tables.float_calculation_table.map((row, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{row.task_id || row.task_ID}</strong></td>
+                            <td>{row.es || row.ES !== undefined ? row.ES : row.es}</td>
+                            <td>{row.ls || row.LS !== undefined ? row.LS : row.ls}</td>
+                            <td>{row.ef || row.EF !== undefined ? row.EF : row.ef}</td>
+                            <td>{row.lf || row.LF !== undefined ? row.LF : row.lf}</td>
+                            <td>
+                              <span className={row.total_float === 0 || row.Total_Float === 0 ? 'critical-badge' : ''}>
+                                {row.total_float !== undefined ? row.total_float : (row.Total_Float !== undefined ? row.Total_Float : 'N/A')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="table-note">
+                    <strong>Rule:</strong> Total Float = LS − ES (or LF − EF)
+                  </p>
+                </div>
+              )}
+
+              {/* 5. Critical Path Identification Table */}
+              {result.cpm_tables.critical_path_identification_table && result.cpm_tables.critical_path_identification_table.length > 0 && (
+                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                  <h4 className="table-title">5. Critical Path Identification Table</h4>
+                  <div className="table-container">
+                    <table className="resource-table">
+                      <thead>
+                        <tr>
+                          <th>Task_ID</th>
+                          <th>Total Float</th>
+                          <th>Critical</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.cpm_tables.critical_path_identification_table.map((row, idx) => {
+                          const isCritical = row.critical === true || row.Critical === true || 
+                                           row.critical === 'Yes' || row.Critical === 'Yes' ||
+                                           (row.total_float === 0 || row.Total_Float === 0)
+                          return (
+                            <tr key={idx} className={isCritical ? 'critical-row' : ''}>
+                              <td><strong>{row.task_id || row.task_ID}</strong></td>
+                              <td>{row.total_float !== undefined ? row.total_float : (row.Total_Float !== undefined ? row.Total_Float : 'N/A')}</td>
+                              <td>
+                                {isCritical ? (
+                                  <span className="critical-badge">Yes</span>
+                                ) : (
+                                  <span className="non-critical-badge">No</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Critical Path Sequence */}
+              {result.cpm_tables.critical_path_sequence && (
+                <div className="resource-table-wrapper" style={{ marginBottom: '24px', background: '#fff7ed', border: '2px solid #fb923c' }}>
+                  <h4 className="table-title" style={{ color: '#c2410c' }}>Critical Path Sequence</h4>
+                  <div style={{ padding: '16px', fontSize: '16px', fontWeight: '600', color: '#ea580c' }}>
+                    {result.cpm_tables.critical_path_string || 
+                     (Array.isArray(result.cpm_tables.critical_path_sequence) 
+                       ? result.cpm_tables.critical_path_sequence.join(' → ') 
+                       : result.cpm_tables.critical_path_sequence)}
+                  </div>
+                  <p className="table-note" style={{ color: '#92400e' }}>
+                    <strong>Critical Path:</strong> Tasks with Total Float = 0 form the critical path that determines project duration.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PART A — Resource Leveling Tables (Following Guide Format) - From API */}
+          {result && (() => {
+            // Use resource_leveling_tables if available, otherwise fall back to tables
+            const tables = result.resource_leveling_tables || result.tables
+            if (!tables) return null
+            
+            return (
+              <div className="resource-tables-section" style={{ marginTop: '32px', padding: '24px', background: '#f0f9ff', borderRadius: '12px', border: '2px solid #bae6fd' }}>
+                <h3 className="section-subtitle" style={{ color: '#0c4a6e', marginBottom: '24px' }}>
+                  PART A — Resource Leveling Tables (Following Guide Format)
+                </h3>
+                
+                {/* 6. Resource Requirement Table */}
+                {tables.resource_requirement_table && tables.resource_requirement_table.length > 0 && (
+                  <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                    <h4 className="table-title">6. Resource Requirement Table (for Leveling)</h4>
+                    <div className="table-container">
+                      <table className="resource-table">
+                        <thead>
+                          <tr>
+                            <th>Task_ID</th>
+                            <th>Task_Name</th>
+                            <th>Resource Type</th>
+                            <th>Required Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tables.resource_requirement_table.map((row, idx) => (
+                            <tr key={idx}>
+                              <td><strong>{row.task_id || row.task_ID}</strong></td>
+                              <td className="task-name-cell">{row.task_name || row.task_Name}</td>
+                              <td>{row.resource_type || row.Resource_Type}</td>
+                              <td>{row.required_qty !== undefined ? row.required_qty : (row.Required_Qty !== undefined ? row.Required_Qty : 'N/A')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="table-note">
+                      Shows which resources (roles) are required for each task.
+                    </p>
+                  </div>
+                )}
+
+                {/* 7. Resource Availability Table */}
+                {tables.resource_availability_table && tables.resource_availability_table.length > 0 && (
+                  <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                    <h4 className="table-title">7. Resource Availability Table</h4>
+                    <div className="table-container">
+                      <table className="resource-table">
+                        <thead>
+                          <tr>
+                            <th>Resource Type</th>
+                            <th>Available per Day</th>
+                            <th>Total Days</th>
+                            <th>Date Range</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tables.resource_availability_table.map((row, idx) => (
+                            <tr key={idx}>
+                              <td><strong>{row.resource_type || row.Resource_Type}</strong></td>
+                              <td>{row.available_per_day !== undefined ? row.available_per_day : (row.Available_per_Day !== undefined ? row.Available_per_Day : 'N/A')}</td>
+                              <td>{row.total_days !== undefined ? row.total_days : (row.Total_Days !== undefined ? row.Total_Days : 'N/A')}</td>
+                              <td>
+                                {row.date_range ? (
+                                  <span>
+                                    {row.date_range.start ? new Date(row.date_range.start).toLocaleDateString() : 'N/A'} - {row.date_range.end ? new Date(row.date_range.end).toLocaleDateString() : 'N/A'}
+                                  </span>
+                                ) : (row.Date_Range ? (
+                                  <span>
+                                    {row.Date_Range.start ? new Date(row.Date_Range.start).toLocaleDateString() : 'N/A'} - {row.Date_Range.end ? new Date(row.Date_Range.end).toLocaleDateString() : 'N/A'}
+                                  </span>
+                                ) : 'N/A')}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="table-note">
+                      Shows available resources per day for each role (average availability if uniform, or min/max if varying).
+                    </p>
+                  </div>
+                )}
+
+                {/* 8. Final Schedule Table (Post-Leveling) */}
+                {tables.final_schedule_table && tables.final_schedule_table.length > 0 && (
+                  <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                    <h4 className="table-title">8. Final Schedule Table (Post-Leveling)</h4>
+                    <p className="table-note">
+                      (If shifts occur, Leveled = Yes and dates update.) Days are 0-based (Day 0 = project start)
+                    </p>
+                    <div className="table-container">
+                      <table className="resource-table">
+                        <thead>
+                          <tr>
+                            <th>Task_ID</th>
+                            <th>Task_Name</th>
+                            <th>Start Day</th>
+                            <th>End Day</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Duration (Days)</th>
+                            <th>Leveled</th>
+                            <th>Critical</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tables.final_schedule_table.map((row, idx) => {
+                            const isLeveled = row.leveled === true || row.Leveled === true || row.leveled === 'Yes' || row.Leveled === 'Yes'
+                            const isCritical = row.is_critical === true || row.Is_Critical === true || row.critical === true || row.Critical === true
+                            
+                            return (
+                              <tr 
+                                key={idx}
+                                className={isCritical ? 'critical-row' : ''}
+                                style={{ background: isLeveled ? '#f0fdf4' : 'white' }}
+                              >
+                                <td><strong>{row.task_id || row.task_ID}</strong></td>
+                                <td className="task-name-cell">{row.task_name || row.task_Name}</td>
+                                <td>{row.start_day !== undefined ? row.start_day : (row.Start_Day !== undefined ? row.Start_Day : 'N/A')}</td>
+                                <td>{row.end_day !== undefined ? row.end_day : (row.End_Day !== undefined ? row.End_Day : 'N/A')}</td>
+                                <td>{row.start_date ? new Date(row.start_date).toLocaleDateString() : (row.Start_Date ? new Date(row.Start_Date).toLocaleDateString() : 'N/A')}</td>
+                                <td>{row.end_date ? new Date(row.end_date).toLocaleDateString() : (row.End_Date ? new Date(row.End_Date).toLocaleDateString() : 'N/A')}</td>
+                                <td>{row.duration_days !== undefined ? row.duration_days : (row.Duration_Days !== undefined ? row.Duration_Days : 'N/A')}</td>
+                                <td>
+                                  {isLeveled ? (
+                                    <span className="leveled-badge">Yes</span>
+                                  ) : (
+                                    <span className="not-leveled-badge">No</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {isCritical ? (
+                                    <span className="critical-badge">Yes</span>
+                                  ) : (
+                                    <span className="non-critical-badge">No</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="table-note">
+                      Shows the final schedule after resource leveling with the <strong>leveled</strong> flag indicating if a task was adjusted.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {result.leveled && (
-            <div className="leveling-success">
-              Resource leveling analysis completed successfully.
+            <div className="leveling-success" style={{
+              padding: '16px',
+              background: '#d4edda',
+              border: '2px solid #28a745',
+              borderRadius: '8px',
+              color: '#155724',
+              marginTop: '20px'
+            }}>
+              <strong>✅ Resource Leveling Applied Successfully</strong>
+              <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>
+                Schedule changes have been applied. Tasks have been adjusted to respect resource constraints while maintaining dependencies. 
+                {result.adjustments_applied !== undefined && (
+                  <span> <strong>{result.adjustments_applied}</strong> task(s) were leveled.</span>
+                )}
+                {result.tasks_leveled !== undefined && (
+                  <span> <strong>{result.tasks_leveled}</strong> task(s) marked as "Leveled".</span>
+                )}
+              </p>
+              {result.unresolved_conflicts !== undefined && result.unresolved_conflicts > 0 && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '12px',
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
+                  borderRadius: '6px',
+                  color: '#856404'
+                }}>
+                  <strong>⚠️ Unresolved Conflicts: {result.unresolved_conflicts}</strong>
+                  <p style={{ margin: '8px 0 0 0', fontSize: '13px' }}>
+                    Some conflicts could not be resolved because only critical tasks were affected. 
+                    Critical tasks are protected during leveling to maintain the critical path. 
+                    Consider increasing available resources or adjusting project scope.
+                  </p>
+                </div>
+              )}
+              {result.conflicts_resolved !== undefined && (
+                <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#155724' }}>
+                  <strong>Conflicts resolved:</strong> {result.conflicts_resolved}
+                </p>
+              )}
             </div>
           )}
         </div>

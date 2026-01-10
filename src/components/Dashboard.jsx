@@ -63,7 +63,7 @@ function Dashboard({ projectIdFromRoute }) {
     }
     setError(null)
     
-    // Add timeout to prevent infinite loading
+    // Add timeout to prevent infinite loading (extended for optimized backend)
     const timeoutId = setTimeout(() => {
       console.warn('API request timeout - using mock data')
       setError('API request timeout. Using mock data for demonstration.')
@@ -71,7 +71,7 @@ function Dashboard({ projectIdFromRoute }) {
       setDashboardData(getMockData())
       setLoading(false)
       setRefreshing(false)
-    }, 15000) // 15 second timeout
+    }, 30000) // 30 second timeout (extended from 15s - backend is optimized and should respond faster)
 
     try {
       // Fetch all data from actual API endpoints with individual timeouts
@@ -175,12 +175,25 @@ function Dashboard({ projectIdFromRoute }) {
 
       // 🔍 Workforce Trends Data Logging
       if (workforceTrendsData) {
+        const hasValidData = workforceTrendsData.daily_trends && workforceTrendsData.daily_trends.length > 0
+        const summaryHasData = workforceTrendsData.summary && (
+          workforceTrendsData.summary.total_days > 0 ||
+          workforceTrendsData.summary.average_productivity > 0 ||
+          workforceTrendsData.summary.average_utilization > 0 ||
+          workforceTrendsData.summary.total_hours > 0
+        )
         console.log('📈 Workforce Trends Data:', {
           hasDailyTrends: !!workforceTrendsData.daily_trends,
           dailyTrendsCount: workforceTrendsData.daily_trends?.length || 0,
           averageProductivity: workforceTrendsData.summary?.average_productivity,
+          summaryHasData,
+          hasValidData,
           sampleTrend: workforceTrendsData.daily_trends?.[0],
+          period: workforceTrendsData.period,
         })
+        if (!hasValidData && !summaryHasData) {
+          console.warn('⚠️ Workforce Trends API returned but has no valid data (empty daily_trends and all zeros in summary)')
+        }
       } else {
         console.log('ℹ️ Workforce Trends Data not available (will use date-based grouping from entries)')
       }

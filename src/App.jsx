@@ -6,7 +6,6 @@ import CriticalPathPage from './pages/CriticalPathPage'
 import GanttChartPage from './pages/GanttChartPage'
 import ResourceLevelingPage from './pages/ResourceLevelingPage'
 import RiskRegisterPage from './pages/RiskRegisterPage'
-import RiskIndicatorPage from './pages/RiskIndicatorPage'
 import './App.css'
 
 function App() {
@@ -21,7 +20,6 @@ function App() {
             <Route path="/gantt-chart/:projectId" element={<GanttChartPage />} />
             <Route path="/resource-leveling/:projectId" element={<ResourceLevelingPage />} />
             <Route path="/risk-register/:projectId" element={<RiskRegisterPage />} />
-            <Route path="/risk-indicators/:projectId" element={<RiskIndicatorPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

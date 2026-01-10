@@ -144,13 +144,29 @@ export const apiService = {
     }
   },
 
-  // Create Project
+  // Create Project (with increased timeout for validation and database operations)
   createProject: async (projectData) => {
     try {
-      const response = await api.post('/projects', projectData)
+      // Use longer timeout for project creation (60 seconds) to handle validation and database operations
+      const response = await api.post('/projects', projectData, {
+        timeout: 60000 // 60 seconds timeout
+      })
       return response.data
     } catch (error) {
       console.error('Error creating project:', error)
+      
+      // Enhance error object with helpful information
+      if (error.response) {
+        // Server responded with error status
+        error.response._handled = true
+        error.response._errorType = error.response.status >= 500 ? 'server' : 'client'
+      } else if (error.request) {
+        // Request made but no response (timeout, network error)
+        error._handled = true
+        error._errorType = 'network'
+        error._isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout')
+      }
+      
       throw error
     }
   },
@@ -913,15 +929,37 @@ export const apiService = {
     }
   },
 
-  // ==================== Time-based Risk Indicators API ====================
-  
-  // Get Time-based Risk Indicators
-  getTimeBasedRiskIndicators: async (projectId) => {
+  // Apply Resource Leveling V2 (Actually applies schedule changes)
+  applyResourceLevelingV2: async (projectId, options = {}) => {
     try {
-      const response = await api.get(`/time-based-risk-indicators/project/${projectId}`)
+      const params = {
+        auto_apply: options.autoApply !== undefined ? options.autoApply : false,
+        protect_critical: options.protectCritical !== undefined ? options.protectCritical : true,
+        max_hours_per_day: options.maxHoursPerDay || 8,
+        max_hours_per_week: options.maxHoursPerWeek || 40,
+        consider_availability: options.considerAvailability !== false
+      }
+      // Increase timeout for resource leveling operations (60 seconds)
+      const response = await api.post(`/resource-leveling/project/${projectId}/apply-v2`, null, { 
+        params,
+        timeout: 60000 // 60 seconds timeout
+      })
       return response.data
     } catch (error) {
-      console.error('Error fetching time-based risk indicators:', error)
+      console.error('Error applying resource leveling V2:', error)
+      throw error
+    }
+  },
+
+  // ==================== Project Validation API ====================
+  
+  // Get Data Completeness Validation
+  getDataCompleteness: async (projectId) => {
+    try {
+      const response = await api.get(`/project-validation/project/${projectId}/completeness`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching data completeness:', error)
       throw error
     }
   },

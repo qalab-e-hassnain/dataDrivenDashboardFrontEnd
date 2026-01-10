@@ -155,25 +155,42 @@ export const transformWorkforceData = (workforceData, trendsData = null) => {
 
   // ✅ Use trends API if available (has daily_trends with average_productivity)
   let timeSeriesData = []
+  let hasValidTrendsData = false
   
+  // Check if trendsData exists and has valid daily_trends
   if (trendsData && trendsData.daily_trends && Array.isArray(trendsData.daily_trends) && trendsData.daily_trends.length > 0) {
-    // Use trends API data for time-series (most accurate)
-    console.log('📊 Using workforce trends API data for time-series')
-    const firstDate = new Date(trendsData.daily_trends[0].date)
-    timeSeriesData = trendsData.daily_trends.map((trend, index) => {
-      const date = new Date(trend.date)
-      // Calculate week number from first date
-      const daysDiff = Math.floor((date - firstDate) / (1000 * 60 * 60 * 24))
-      const weekNum = Math.floor(daysDiff / 7) + 1
-      
-      return {
-        date: trend.date,
-        week: `Week ${weekNum}`,
-        productivity: Math.round(trend.average_productivity || 0),
-        utilization: Math.round(trend.average_utilization || trend.utilization || 0),
-      }
-    })
-  } else {
+    // Check if summary indicates real data (not all zeros)
+    const summaryHasData = trendsData.summary && (
+      trendsData.summary.total_days > 0 ||
+      trendsData.summary.average_productivity > 0 ||
+      trendsData.summary.average_utilization > 0 ||
+      trendsData.summary.total_hours > 0
+    )
+    
+    if (summaryHasData || trendsData.daily_trends.length > 0) {
+      hasValidTrendsData = true
+      // Use trends API data for time-series (most accurate)
+      console.log('📊 Using workforce trends API data for time-series')
+      const firstDate = new Date(trendsData.daily_trends[0].date)
+      timeSeriesData = trendsData.daily_trends.map((trend, index) => {
+        const date = new Date(trend.date)
+        // Calculate week number from first date
+        const daysDiff = Math.floor((date - firstDate) / (1000 * 60 * 60 * 24))
+        const weekNum = Math.floor(daysDiff / 7) + 1
+        
+        return {
+          date: trend.date,
+          week: `Week ${weekNum}`,
+          productivity: Math.round(trend.average_productivity || 0),
+          utilization: Math.round(trend.average_utilization || trend.utilization || 0),
+        }
+      })
+    } else {
+      console.log('⚠️ Trends API returned but has no valid data (all zeros or empty daily_trends)')
+    }
+  }
+  
+  if (!hasValidTrendsData) {
     // ✅ Group by actual dates from workforce entries (dates are now spread over timeline)
     const dateGroups = new Map()
     
@@ -203,69 +220,80 @@ export const transformWorkforceData = (workforceData, trendsData = null) => {
       const entries = group.entries
       
       // Calculate average productivity from API productivity_percentage
+      // Backend fix: Only entries with hours_worked > 0 contribute to metrics
       const entriesWithProductivity = entries.filter(e => 
         e.productivity_percentage !== null && 
         e.productivity_percentage !== undefined && 
         typeof e.productivity_percentage === 'number' &&
-        isFinite(e.productivity_percentage)
+        isFinite(e.productivity_percentage) &&
+        e.productivity_percentage > 0  // Backend excludes 0-hour entries
       )
       
       const dateProductivity = entriesWithProductivity.length > 0
         ? entriesWithProductivity.reduce((sum, e) => sum + (e.productivity_percentage || 0), 0) / entriesWithProductivity.length
-        : avgProductivity
+        : null  // Don't use avgProductivity fallback - return null if no valid entries
       
-      const dateUtilization = entries.length > 0
-        ? entries.reduce((sum, e) => sum + (e.utilization_rate || 0), 0) / entries.length
-        : avgUtilization
+      // Backend fix: Utilization matches productivity (same calculation)
+      // Use productivity_percentage if available, otherwise use utilization_rate
+      const entriesWithUtilization = entries.filter(e => 
+        (e.productivity_percentage !== null && e.productivity_percentage !== undefined && e.productivity_percentage > 0) ||
+        (e.utilization_rate !== null && e.utilization_rate !== undefined && e.utilization_rate > 0)
+      )
+      
+      const dateUtilization = entriesWithUtilization.length > 0
+        ? entriesWithUtilization.reduce((sum, e) => {
+            // Backend guarantees productivity and utilization are the same
+            const value = e.productivity_percentage !== null && e.productivity_percentage !== undefined && e.productivity_percentage > 0
+              ? e.productivity_percentage
+              : (e.utilization_rate || 0)
+            return sum + (value > 0 ? value : 0)
+          }, 0) / entriesWithUtilization.filter(e => {
+            const value = e.productivity_percentage !== null ? e.productivity_percentage : e.utilization_rate
+            return value !== null && value !== undefined && value > 0
+          }).length
+        : null  // Don't use avgUtilization fallback - return null if no valid entries
       
       return {
         date: dateKey,
         week: `Week ${Math.floor(index / 7) + 1}`,
-        productivity: Math.round(dateProductivity),
-        utilization: Math.round(dateUtilization),
+        productivity: dateProductivity !== null ? Math.round(dateProductivity) : 0,
+        utilization: dateUtilization !== null ? Math.round(dateUtilization) : 0,
       }
     })
     
-    // If no dates found, fallback to weekly grouping by index
+    // REMOVED: Weekly grouping fallback by index (was creating pseudo-data)
+    // If no dates found, timeSeriesData will be empty and frontend will show empty state
     if (timeSeriesData.length === 0) {
-      console.warn('⚠️ No dates found in workforce entries, using fallback weekly grouping')
-      const weeks = 7
-      for (let i = 1; i <= weeks; i++) {
-        const weekWorkers = workforceData.filter((w, index) => (index % weeks) === (i - 1))
-        
-        const weekProductivity = weekWorkers.length > 0
-          ? weekWorkers
-              .filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined && typeof w.productivity_percentage === 'number' && isFinite(w.productivity_percentage))
-              .reduce((sum, w) => sum + (w.productivity_percentage || 0), 0) / Math.max(1, weekWorkers.filter(w => w.productivity_percentage !== null && w.productivity_percentage !== undefined).length)
-          : avgProductivity
-
-        const weekUtilization = weekWorkers.length > 0
-          ? weekWorkers.reduce((sum, w) => sum + (w.utilization_rate || 0), 0) / weekWorkers.length
-          : avgUtilization
-
-        timeSeriesData.push({
-          week: `Week ${i}`,
-          productivity: Math.round(weekProductivity),
-          utilization: Math.round(weekUtilization),
-        })
-      }
+      console.warn('⚠️ No dates found in workforce entries - showing empty state instead of pseudo-data')
     }
   }
 
+  // Check if we have any real data
+  const hasData = timeSeriesData.length > 0 || (totalWorkers > 0 && (avgProductivity > 0 || avgUtilization > 0))
+  
   console.log('📊 Workforce Time-Series Data:', {
     totalEntries: workforceData.length,
     timeSeriesPoints: timeSeriesData.length,
-    hasTrendsData: !!trendsData,
+    hasTrendsData: !!trendsData && hasValidTrendsData,
     avgProductivity: Math.round(avgProductivity),
+    hasData,
   })
+
+  // If no data available, return null or empty structure
+  if (!hasData && workforceData.length === 0) {
+    console.warn('⚠️ No workforce data available - returning null')
+    return null
+  }
 
   return {
     total: totalWorkers,
     active: activeWorkers,
     productivity: Math.round(avgProductivity),
     utilization: Math.round(avgUtilization),
-    weeklyData: timeSeriesData, // Now contains date-based time-series data
+    weeklyData: timeSeriesData, // Now contains date-based time-series data (empty array if no data)
     rawData: workforceData,
+    hasData, // Flag to indicate if there's actual data
+    isEmpty: !hasData && timeSeriesData.length === 0, // Explicitly mark as empty
   }
 }
 
