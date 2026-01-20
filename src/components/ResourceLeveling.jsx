@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { apiService } from '../services/api'
 import './ResourceLeveling.css'
 
@@ -81,49 +81,6 @@ const ResourceLeveling = ({ projectId }) => {
     }
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'overutilized':
-        return '#dc3545'
-      case 'optimal':
-        return '#28a745'
-      case 'underutilized':
-        return '#ffc107'
-      case 'no_resources':
-        return '#6c757d'
-      default:
-        return '#6c757d'
-    }
-  }
-
-  // Prepare conflict timeline data
-  const getConflictTimelineData = () => {
-    if (!result?.conflicts) return []
-    
-    const conflictsByDate = {}
-    result.conflicts.forEach(conflict => {
-      const date = conflict.date
-      if (!conflictsByDate[date]) {
-        conflictsByDate[date] = {
-          date,
-          conflicts: 0,
-          shortageHours: 0,
-          roles: new Set()
-        }
-      }
-      conflictsByDate[date].conflicts++
-      conflictsByDate[date].shortageHours += conflict.shortage_hours || 0
-      conflictsByDate[date].roles.add(conflict.role)
-    })
-
-    return Object.values(conflictsByDate).map(item => ({
-      date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      conflicts: item.conflicts,
-      shortageHours: item.shortageHours,
-      roles: item.roles.size
-    })).sort((a, b) => new Date(a.date) - new Date(b.date))
-  }
-
   // Prepare utilization chart data
   const getUtilizationChartData = () => {
     if (!utilizationForecast?.daily_utilization) return []
@@ -193,24 +150,98 @@ const ResourceLeveling = ({ projectId }) => {
     })
   }
 
-  // Prepare role conflict summary
-  const getRoleConflictSummary = () => {
-    if (!result?.conflicts) return []
-    
-    const roleStats = {}
-    result.conflicts.forEach(conflict => {
-      if (!roleStats[conflict.role]) {
-        roleStats[conflict.role] = {
-          role: conflict.role,
-          conflicts: 0,
-          totalShortage: 0
-        }
-      }
-      roleStats[conflict.role].conflicts++
-      roleStats[conflict.role].totalShortage += conflict.shortage_hours || 0
+  // Deduplicate rows by Task_ID (case-insensitive) while keeping the first occurrence
+  const uniqueByTaskId = (rows = []) => {
+    const seen = new Set()
+    return rows.filter(row => {
+      const id = (row.task_id || row.task_ID || row.task || '').toString().toLowerCase().trim()
+      if (!id) return true
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  }
+
+  // Build a clean critical path sequence using the deduped critical activities we display
+  const getCriticalPathDisplay = () => {
+    if (!result?.cpm_tables) return null
+    const table = result.cpm_tables.critical_path_identification_table || []
+    const criticalRows = uniqueByTaskId(table).filter(row => {
+      const isCriticalFlag = row.critical === true || row.Critical === true || row.critical === 'Yes' || row.Critical === 'Yes'
+      const zeroFloat = row.total_float === 0 || row.Total_Float === 0
+      return isCriticalFlag || zeroFloat
     })
 
-    return Object.values(roleStats).sort((a, b) => b.conflicts - a.conflicts)
+    if (criticalRows.length === 0) return null
+
+    const idToName = new Map()
+    criticalRows.forEach(row => {
+      const id = (row.task_id || row.task_ID || '').toString()
+      const name = row.task_name || row.task_Name || id
+      if (id) idToName.set(id, name)
+    })
+
+    // Build sequence from unique critical activities only
+    // Use backend sequence if available, but remove all duplicates
+    let rawSequence = []
+    if (result.cpm_tables.critical_path_string) {
+      // Parse string sequence (split by arrow or comma)
+      const str = result.cpm_tables.critical_path_string
+      rawSequence = str.split(/[→,]/).map(s => s.trim()).filter(s => s)
+    } else if (Array.isArray(result.cpm_tables.critical_path_sequence)) {
+      rawSequence = result.cpm_tables.critical_path_sequence.map(s => (s || '').toString().trim()).filter(s => s)
+    }
+
+    const orderedIds = []
+    const seen = new Set()
+
+    // Helper to add a task ID (only if unique and in our critical list)
+    const addId = (id) => {
+      const norm = (id || '').toString().trim()
+      if (!norm || seen.has(norm) || !idToName.has(norm)) return
+      seen.add(norm)
+      orderedIds.push(norm)
+    }
+
+    // Create a map of task names to IDs for lookup
+    const nameToId = new Map()
+    criticalRows.forEach(row => {
+      const id = (row.task_id || row.task_ID || '').toString()
+      const name = (row.task_name || row.task_Name || '').toString().trim()
+      if (id && name) nameToId.set(name.toLowerCase(), id)
+    })
+
+    // Process backend sequence and remove duplicates
+    if (rawSequence.length > 0) {
+      rawSequence.forEach(item => {
+        const normalized = (item || '').toString().trim()
+        if (!normalized) return
+        
+        // Check if it's a task ID we know about
+        if (idToName.has(normalized)) {
+          addId(normalized)
+        } else {
+          // Might be a task name, try to find matching ID
+          const matchingId = nameToId.get(normalized.toLowerCase())
+          if (matchingId) {
+            addId(matchingId)
+          }
+        }
+      })
+    }
+
+    // If no valid sequence from backend (or too many duplicates), use critical rows in order
+    if (orderedIds.length === 0 || orderedIds.length < criticalRows.length * 0.5) {
+      // Clear and rebuild from critical rows only
+      orderedIds.length = 0
+      seen.clear()
+      criticalRows.forEach(row => addId(row.task_id || row.task_ID))
+    }
+
+    if (orderedIds.length === 0) return null
+
+    // Display sequence using activity IDs (no names) to avoid duplication/noise
+    return orderedIds.join(' → ')
   }
 
   return (
@@ -431,6 +462,14 @@ const ResourceLeveling = ({ projectId }) => {
                 </div>
                 <div className="summary-label">Affected Roles</div>
               </div>
+              {result.over_utilized_workers !== undefined && result.over_utilized_workers !== null && (
+                <div className="summary-card overutilized-card" style={{ background: '#f8d7da', border: '2px solid #dc3545' }}>
+                  <div className="summary-value" style={{ color: '#721c24' }}>
+                    {Array.isArray(result.over_utilized_workers) ? result.over_utilized_workers.length : (result.summary?.over_utilized_workers_count || 0)}
+                  </div>
+                  <div className="summary-label" style={{ color: '#721c24' }}>Over-Utilized Workers</div>
+                </div>
+              )}
               {result.adjustments_applied !== undefined && (
                 <div className="summary-card adjustments-card" style={{ background: '#d4edda', border: '2px solid #28a745' }}>
                   <div className="summary-value" style={{ color: '#155724' }}>{result.adjustments_applied}</div>
@@ -440,64 +479,66 @@ const ResourceLeveling = ({ projectId }) => {
             </div>
           </div>
 
-          {/* Conflict Timeline Chart */}
-          {result.conflicts && result.conflicts.length > 0 && (
-            <div className="chart-section">
-              <h3>Conflict Timeline</h3>
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={getConflictTimelineData()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="#666"
-                      tick={{ fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis 
-                      stroke="#666"
-                      label={{ value: 'Conflicts', angle: -90, position: 'insideLeft' }}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '8px' }}
-                    />
-                    <Legend />
-                    <Bar dataKey="conflicts" fill="#dc3545" name="Conflicts" />
-                    <Bar dataKey="roles" fill="#fd7e14" name="Affected Roles" />
-                  </BarChart>
-                </ResponsiveContainer>
+          {/* Over-Utilized Workers Warning */}
+          {result.over_utilized_workers && Array.isArray(result.over_utilized_workers) && result.over_utilized_workers.length > 0 && (
+            <div className="overutilized-warning" style={{
+              padding: '16px',
+              background: '#f8d7da',
+              border: '2px solid #dc3545',
+              borderRadius: '8px',
+              color: '#721c24',
+              marginTop: '20px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ fontSize: '20px', marginRight: '8px' }}>⚠️</span>
+                <strong style={{ fontSize: '16px' }}>Over-Utilized Workers Detected: {result.over_utilized_workers.length}</strong>
               </div>
-            </div>
-          )}
-
-          {/* Role Conflict Summary Chart */}
-          {result.conflicts && result.conflicts.length > 0 && (
-            <div className="chart-section">
-              <h3>Conflicts by Role</h3>
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={getRoleConflictSummary()} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                    <XAxis type="number" stroke="#666" tick={{ fontSize: 12 }} />
-                    <YAxis 
-                      type="category" 
-                      dataKey="role" 
-                      stroke="#666"
-                      tick={{ fontSize: 12 }}
-                      width={100}
-                    />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '8px' }}
-                    />
-                    <Legend />
-                    <Bar dataKey="conflicts" fill="#dc3545" name="Number of Conflicts" />
-                    <Bar dataKey="totalShortage" fill="#f59e0b" name="Total Shortage (hrs)" />
-                  </BarChart>
-                </ResponsiveContainer>
+              <p style={{ margin: '8px 0', fontSize: '14px' }}>
+                The following workers have utilization rates exceeding 100% (more than 8 hours per day). 
+                This may indicate double-booking or incorrect data entry.
+              </p>
+              <div style={{ marginTop: '12px', maxHeight: '200px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #dc3545', fontWeight: '600' }}>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Worker Name</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Hours Worked</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Utilization</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.over_utilized_workers.slice(0, 10).map((worker, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f5c6cb' }}>
+                        <td style={{ padding: '8px' }}>{worker.worker_name || worker.name || 'N/A'}</td>
+                        <td style={{ padding: '8px' }}>
+                          {worker.date ? new Date(worker.date).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>
+                          {worker.hours_worked !== undefined ? worker.hours_worked.toFixed(1) : 'N/A'}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: '600', color: '#dc3545' }}>
+                          {worker.utilization_rate !== undefined 
+                            ? `${worker.utilization_rate.toFixed(1)}%` 
+                            : (worker.utilization !== undefined 
+                              ? `${worker.utilization.toFixed(1)}%` 
+                              : 'N/A')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {result.over_utilized_workers.length > 10 && (
+                  <p style={{ marginTop: '8px', fontSize: '12px', fontStyle: 'italic' }}>
+                    Showing first 10 of {result.over_utilized_workers.length} over-utilized workers. 
+                    Fix these by reducing hours_worked to ≤ 8.0 per day or splitting assignments across multiple days.
+                  </p>
+                )}
               </div>
+              <p style={{ marginTop: '12px', fontSize: '13px', fontStyle: 'italic' }}>
+                <strong>Note:</strong> These workers will fail validation on update. Use the Workforce Analytics page to view and fix over-utilization issues.
+              </p>
             </div>
           )}
 
@@ -755,7 +796,6 @@ const ResourceLeveling = ({ projectId }) => {
                           <th>End Date</th>
                           <th>Duration (Days)</th>
                           <th>Status</th>
-                          <th>Role</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -769,7 +809,6 @@ const ResourceLeveling = ({ projectId }) => {
                           const duration = task.duration_days || (task.planned_start_date && task.planned_end_date 
                             ? Math.ceil((new Date(task.planned_end_date) - new Date(task.planned_start_date)) / (1000 * 60 * 60 * 24))
                             : task.planned_start_date ? 1 : 0)
-                          const role = task.role || task.assigned_role || task.resource_role || 'N/A'
                           
                           return (
                             <tr key={idx}>
@@ -782,7 +821,6 @@ const ResourceLeveling = ({ projectId }) => {
                                   {task.status || 'Unknown'}
                                 </span>
                               </td>
-                              <td>{role}</td>
                             </tr>
                           )
                         })}
@@ -796,73 +834,6 @@ const ResourceLeveling = ({ projectId }) => {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Conflict Calendar/Heatmap */}
-          {result.conflicts && result.conflicts.length > 0 && (
-            <div className="conflicts-section">
-              <h3>Resource Conflicts Details</h3>
-              <div className="conflict-calendar">
-                {result.conflicts.map((conflict, index) => (
-                  <div key={index} className="conflict-day-card">
-                    <div className="conflict-day-header">
-                      <div className="conflict-date-badge">
-                        {new Date(conflict.date).toLocaleDateString('en-US', { 
-                          weekday: 'short', 
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </div>
-                      <div className="conflict-role-badge">{conflict.role}</div>
-                    </div>
-                    <div className="conflict-metrics-visual">
-                      <div className="metric-bar-container">
-                        <div className="metric-bar-label">Needed: {conflict.needed_hours}h</div>
-                        <div className="metric-bar">
-                          <div 
-                            className="metric-bar-fill needed" 
-                            style={{ width: `${Math.min((conflict.needed_hours / 24) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div className="metric-bar-container">
-                        <div className="metric-bar-label">Available: {conflict.available_hours}h</div>
-                        <div className="metric-bar">
-                          <div 
-                            className="metric-bar-fill available" 
-                            style={{ width: `${Math.min((conflict.available_hours / 24) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div className="metric-bar-container shortage">
-                        <div className="metric-bar-label">Shortage: {conflict.shortage_hours}h</div>
-                        <div className="metric-bar">
-                          <div 
-                            className="metric-bar-fill shortage-fill" 
-                            style={{ width: `${Math.min((conflict.shortage_hours / 24) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                    {conflict.affected_tasks && conflict.affected_tasks.length > 0 && (
-                      <div className="affected-tasks-compact">
-                        <strong>{conflict.affected_tasks.length} task{conflict.affected_tasks.length > 1 ? 's' : ''} affected</strong>
-                        <div className="task-tags">
-                          {conflict.affected_tasks.slice(0, 3).map((task, taskIndex) => (
-                            <span key={taskIndex} className="task-tag">
-                              {task.task_name}
-                            </span>
-                          ))}
-                          {conflict.affected_tasks.length > 3 && (
-                            <span className="task-tag more">+{conflict.affected_tasks.length - 3} more</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
@@ -952,7 +923,7 @@ const ResourceLeveling = ({ projectId }) => {
             </div>
           )}
 
-          {/* PART B — CPM Tables (Following Guide Format) - From API */}
+          {/* PART B — CPM Tables - From API */}
           {result && result.cpm_tables && (
             <div className="cpm-tables-section" style={{ marginTop: '32px', padding: '24px', background: '#f9fafb', borderRadius: '12px', border: '2px solid #e5e7eb' }}>
               <h3 className="section-subtitle" style={{ color: '#111827', marginBottom: '24px' }}>
@@ -960,112 +931,68 @@ const ResourceLeveling = ({ projectId }) => {
               </h3>
               
               {/* 1. Activity Input Table */}
-              {result.cpm_tables.activity_input_table && result.cpm_tables.activity_input_table.length > 0 && (
+              {result.cpm_tables.activity_input_table && result.cpm_tables.activity_input_table.length > 0 && (() => {
+                // Remove duplicates based on Task_Name (case-insensitive)
+                const seenTaskNames = new Set()
+                const uniqueRows = result.cpm_tables.activity_input_table.filter((row) => {
+                  const taskName = (row.task_name || row.task_Name || '').toLowerCase().trim()
+                  if (!taskName || seenTaskNames.has(taskName)) {
+                    return false
+                  }
+                  seenTaskNames.add(taskName)
+                  return true
+                })
+                
+                return (
+                  <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
+                    <h4 className="table-title">1. Activity Input Table (Uploaded Data)</h4>
+                    <div className="table-container">
+                      <table className="resource-table">
+                        <thead>
+                          <tr>
+                            <th>Task_ID</th>
+                            <th>Task_Name</th>
+                            <th>Duration (Days)</th>
+                            <th>Predecessors</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {uniqueRows.map((row, idx) => (
+                            <tr key={idx}>
+                              <td><strong>{row.task_id || row.task_ID}</strong></td>
+                              <td className="task-name-cell">{row.task_name || row.task_Name}</td>
+                              <td>{row.duration || row.duration_days || row.Duration || 'N/A'}</td>
+                              <td>
+                                {row.predecessors 
+                                  ? (Array.isArray(row.predecessors) ? row.predecessors.join(', ') : row.predecessors)
+                                  : (row.Predecessors 
+                                    ? (Array.isArray(row.Predecessors) ? row.Predecessors.join(', ') : row.Predecessors)
+                                    : '—')}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="table-note">
+                      <strong>Rules applied:</strong> Tasks are listed with their dependencies (predecessors). Duplicates based on Task_Name have been removed.
+                    </p>
+                  </div>
+                )
+              })()}
+
+              {/* 2. Float Calculation Table */}
+              {result.cpm_tables.float_calculation_table && result.cpm_tables.float_calculation_table.length > 0 && (() => {
+                const floatRows = uniqueByTaskId(result.cpm_tables.float_calculation_table)
+                return (
                 <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                  <h4 className="table-title">1. Activity Input Table (Uploaded Data)</h4>
+                  <h4 className="table-title">2. Float Calculation Table</h4>
                   <div className="table-container">
                     <table className="resource-table">
                       <thead>
                         <tr>
                           <th>Task_ID</th>
                           <th>Task_Name</th>
-                          <th>Duration (Days)</th>
-                          <th>Predecessors</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.cpm_tables.activity_input_table.map((row, idx) => (
-                          <tr key={idx}>
-                            <td><strong>{row.task_id || row.task_ID}</strong></td>
-                            <td className="task-name-cell">{row.task_name || row.task_Name}</td>
-                            <td>{row.duration || row.duration_days || row.Duration || 'N/A'}</td>
-                            <td>
-                              {row.predecessors 
-                                ? (Array.isArray(row.predecessors) ? row.predecessors.join(', ') : row.predecessors)
-                                : (row.Predecessors 
-                                  ? (Array.isArray(row.Predecessors) ? row.Predecessors.join(', ') : row.Predecessors)
-                                  : '—')}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="table-note">
-                    <strong>Rules applied:</strong> Tasks are listed with their dependencies (predecessors).
-                  </p>
-                </div>
-              )}
-
-              {/* 2. Forward Pass Table */}
-              {result.cpm_tables.forward_pass_table && result.cpm_tables.forward_pass_table.length > 0 && (
-                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                  <h4 className="table-title">2. Forward Pass Table (Early Dates)</h4>
-                  <div className="table-container">
-                    <table className="resource-table">
-                      <thead>
-                        <tr>
-                          <th>Task_ID</th>
-                          <th>ES</th>
-                          <th>EF</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.cpm_tables.forward_pass_table.map((row, idx) => (
-                          <tr key={idx}>
-                            <td><strong>{row.task_id || row.task_ID}</strong></td>
-                            <td>{row.es || row.ES !== undefined ? row.ES : row.es}</td>
-                            <td>{row.ef || row.EF !== undefined ? row.EF : row.ef}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="table-note">
-                    <strong>Rules applied:</strong> ES = max(EF of predecessors), EF = ES + Duration
-                  </p>
-                </div>
-              )}
-
-              {/* 3. Backward Pass Table */}
-              {result.cpm_tables.backward_pass_table && result.cpm_tables.backward_pass_table.length > 0 && (
-                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                  <h4 className="table-title">3. Backward Pass Table (Late Dates)</h4>
-                  <div className="table-container">
-                    <table className="resource-table">
-                      <thead>
-                        <tr>
-                          <th>Task_ID</th>
-                          <th>LS</th>
-                          <th>LF</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.cpm_tables.backward_pass_table.map((row, idx) => (
-                          <tr key={idx}>
-                            <td><strong>{row.task_id || row.task_ID}</strong></td>
-                            <td>{row.ls || row.LS !== undefined ? row.LS : row.ls}</td>
-                            <td>{row.lf || row.LF !== undefined ? row.LF : row.lf}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="table-note">
-                    <strong>Rules applied:</strong> LF = min(LS of successors), LS = LF − Duration
-                  </p>
-                </div>
-              )}
-
-              {/* 4. Float Calculation Table */}
-              {result.cpm_tables.float_calculation_table && result.cpm_tables.float_calculation_table.length > 0 && (
-                <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                  <h4 className="table-title">4. Float Calculation Table</h4>
-                  <div className="table-container">
-                    <table className="resource-table">
-                      <thead>
-                        <tr>
-                          <th>Task_ID</th>
                           <th>ES</th>
                           <th>LS</th>
                           <th>EF</th>
@@ -1074,9 +1001,10 @@ const ResourceLeveling = ({ projectId }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {result.cpm_tables.float_calculation_table.map((row, idx) => (
+                        {floatRows.map((row, idx) => (
                           <tr key={idx}>
                             <td><strong>{row.task_id || row.task_ID}</strong></td>
+                            <td className="task-name-cell">{row.task_name || row.task_Name || 'N/A'}</td>
                             <td>{row.es || row.ES !== undefined ? row.ES : row.es}</td>
                             <td>{row.ls || row.LS !== undefined ? row.LS : row.ls}</td>
                             <td>{row.ef || row.EF !== undefined ? row.EF : row.ef}</td>
@@ -1095,29 +1023,33 @@ const ResourceLeveling = ({ projectId }) => {
                     <strong>Rule:</strong> Total Float = LS − ES (or LF − EF)
                   </p>
                 </div>
-              )}
+              )})()}
 
-              {/* 5. Critical Path Identification Table */}
-              {result.cpm_tables.critical_path_identification_table && result.cpm_tables.critical_path_identification_table.length > 0 && (
+              {/* 3. Critical Path Identification Table */}
+              {result.cpm_tables.critical_path_identification_table && result.cpm_tables.critical_path_identification_table.length > 0 && (() => {
+                const criticalRows = uniqueByTaskId(result.cpm_tables.critical_path_identification_table)
+                return (
                 <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                  <h4 className="table-title">5. Critical Path Identification Table</h4>
+                  <h4 className="table-title">3. Critical Path Identification Table</h4>
                   <div className="table-container">
                     <table className="resource-table">
                       <thead>
                         <tr>
                           <th>Task_ID</th>
+                          <th>Task_Name</th>
                           <th>Total Float</th>
                           <th>Critical</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {result.cpm_tables.critical_path_identification_table.map((row, idx) => {
+                        {criticalRows.map((row, idx) => {
                           const isCritical = row.critical === true || row.Critical === true || 
                                            row.critical === 'Yes' || row.Critical === 'Yes' ||
                                            (row.total_float === 0 || row.Total_Float === 0)
                           return (
                             <tr key={idx} className={isCritical ? 'critical-row' : ''}>
                               <td><strong>{row.task_id || row.task_ID}</strong></td>
+                              <td className="task-name-cell">{row.task_name || row.task_Name || 'N/A'}</td>
                               <td>{row.total_float !== undefined ? row.total_float : (row.Total_Float !== undefined ? row.Total_Float : 'N/A')}</td>
                               <td>
                                 {isCritical ? (
@@ -1133,17 +1065,15 @@ const ResourceLeveling = ({ projectId }) => {
                     </table>
                   </div>
                 </div>
-              )}
+                )
+              })()}
 
               {/* Critical Path Sequence */}
-              {result.cpm_tables.critical_path_sequence && (
+              {getCriticalPathDisplay() && (
                 <div className="resource-table-wrapper" style={{ marginBottom: '24px', background: '#fff7ed', border: '2px solid #fb923c' }}>
                   <h4 className="table-title" style={{ color: '#c2410c' }}>Critical Path Sequence</h4>
                   <div style={{ padding: '16px', fontSize: '16px', fontWeight: '600', color: '#ea580c' }}>
-                    {result.cpm_tables.critical_path_string || 
-                     (Array.isArray(result.cpm_tables.critical_path_sequence) 
-                       ? result.cpm_tables.critical_path_sequence.join(' → ') 
-                       : result.cpm_tables.critical_path_sequence)}
+                    {getCriticalPathDisplay()}
                   </div>
                   <p className="table-note" style={{ color: '#92400e' }}>
                     <strong>Critical Path:</strong> Tasks with Total Float = 0 form the critical path that determines project duration.
@@ -1162,13 +1092,15 @@ const ResourceLeveling = ({ projectId }) => {
             return (
               <div className="resource-tables-section" style={{ marginTop: '32px', padding: '24px', background: '#f0f9ff', borderRadius: '12px', border: '2px solid #bae6fd' }}>
                 <h3 className="section-subtitle" style={{ color: '#0c4a6e', marginBottom: '24px' }}>
-                  PART A — Resource Leveling Tables (Following Guide Format)
+                  PART A — Resource Leveling Tables
                 </h3>
                 
-                {/* 6. Resource Requirement Table */}
-                {tables.resource_requirement_table && tables.resource_requirement_table.length > 0 && (
+                {/* 4. Resource Requirement Table (for Leveling) */}
+                {tables.resource_requirement_table && tables.resource_requirement_table.length > 0 && (() => {
+                  const requirementRows = uniqueByTaskId(tables.resource_requirement_table)
+                  return (
                   <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                    <h4 className="table-title">6. Resource Requirement Table (for Leveling)</h4>
+                    <h4 className="table-title">4. Resource Requirement Table (for Leveling)</h4>
                     <div className="table-container">
                       <table className="resource-table">
                         <thead>
@@ -1180,7 +1112,7 @@ const ResourceLeveling = ({ projectId }) => {
                           </tr>
                         </thead>
                         <tbody>
-                          {tables.resource_requirement_table.map((row, idx) => (
+                          {requirementRows.map((row, idx) => (
                             <tr key={idx}>
                               <td><strong>{row.task_id || row.task_ID}</strong></td>
                               <td className="task-name-cell">{row.task_name || row.task_Name}</td>
@@ -1195,12 +1127,13 @@ const ResourceLeveling = ({ projectId }) => {
                       Shows which resources (roles) are required for each task.
                     </p>
                   </div>
-                )}
+                  )
+                })()}
 
-                {/* 7. Resource Availability Table */}
+                {/* 5. Resource Availability Table */}
                 {tables.resource_availability_table && tables.resource_availability_table.length > 0 && (
                   <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                    <h4 className="table-title">7. Resource Availability Table</h4>
+                    <h4 className="table-title">5. Resource Availability Table</h4>
                     <div className="table-container">
                       <table className="resource-table">
                         <thead>
@@ -1239,10 +1172,12 @@ const ResourceLeveling = ({ projectId }) => {
                   </div>
                 )}
 
-                {/* 8. Final Schedule Table (Post-Leveling) */}
-                {tables.final_schedule_table && tables.final_schedule_table.length > 0 && (
+                {/* 6. Final Schedule Table (Post-Leveling) */}
+                {tables.final_schedule_table && tables.final_schedule_table.length > 0 && (() => {
+                  const finalRows = uniqueByTaskId(tables.final_schedule_table)
+                  return (
                   <div className="resource-table-wrapper" style={{ marginBottom: '24px' }}>
-                    <h4 className="table-title">8. Final Schedule Table (Post-Leveling)</h4>
+                    <h4 className="table-title">6. Final Schedule Table (Post-Leveling)</h4>
                     <p className="table-note">
                       (If shifts occur, Leveled = Yes and dates update.) Days are 0-based (Day 0 = project start)
                     </p>
@@ -1262,7 +1197,7 @@ const ResourceLeveling = ({ projectId }) => {
                           </tr>
                         </thead>
                         <tbody>
-                          {tables.final_schedule_table.map((row, idx) => {
+                          {finalRows.map((row, idx) => {
                             const isLeveled = row.leveled === true || row.Leveled === true || row.leveled === 'Yes' || row.Leveled === 'Yes'
                             const isCritical = row.is_critical === true || row.Is_Critical === true || row.critical === true || row.Critical === true
                             
@@ -1303,7 +1238,8 @@ const ResourceLeveling = ({ projectId }) => {
                       Shows the final schedule after resource leveling with the <strong>leveled</strong> flag indicating if a task was adjusted.
                     </p>
                   </div>
-                )}
+                  )
+                })()}
               </div>
             )
           })()}
