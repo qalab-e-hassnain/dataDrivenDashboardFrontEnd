@@ -109,6 +109,19 @@ function GanttChart({ projectId }) {
 
   // Calculate timeline range
   const tasks = ganttData.gantt_data
+  
+  // Debug: Log task data to understand structure
+  if (tasks.length > 0) {
+    console.log('📊 Sample task data:', tasks[0])
+    console.log('📊 Critical tasks check:', tasks.map(t => ({
+      name: t.name || t.task_name,
+      is_critical: t.is_critical,
+      critical: t.critical,
+      total_float: t.total_float,
+      Total_Float: t.Total_Float
+    })))
+  }
+  
   const minES = Math.min(...tasks.map(t => t.es || 0))
   const maxEF = Math.max(...tasks.map(t => t.ef || 0))
   const totalDays = maxEF - minES + 1
@@ -116,18 +129,70 @@ function GanttChart({ projectId }) {
   // Chart width in pixels (ensures background extends across full scroll area)
   const chartWidth = Math.max(totalDays * scale, 800)
 
-  // Generate date labels for timeline
+  // Generate date labels for timeline - prevent overlapping and ensure chronological order
   const generateTimelineLabels = () => {
     const labels = []
-    const numLabels = Math.min(20, totalDays) // Max 20 labels
-    const step = Math.ceil(totalDays / numLabels)
+    const labelSet = new Set() // Track unique days to avoid duplicates
     
-    for (let i = 0; i <= totalDays; i += step) {
-      const day = minES + i
-      labels.push(day)
+    // Minimum spacing needed for a label (approximately 50px for "Day XX")
+    const minLabelWidth = 50
+    const minSpacing = minLabelWidth / scale
+    
+    // Calculate step to ensure labels don't overlap
+    let step = Math.ceil(minSpacing)
+    
+    // For very small scales, increase step significantly
+    if (scale < 8) {
+      step = Math.max(step, Math.ceil(60 / scale))
+    } else if (scale < 12) {
+      step = Math.max(step, Math.ceil(40 / scale))
     }
     
-    return labels
+    // Ensure step is at least 1
+    step = Math.max(1, step)
+    
+    // For very long timelines, limit to max 30 labels
+    const maxLabels = 30
+    if (totalDays / step > maxLabels) {
+      step = Math.ceil(totalDays / maxLabels)
+    }
+    
+    // Always include the first day
+    labels.push({ day: minES, position: 0 })
+    labelSet.add(minES)
+    
+    // Generate labels with step, starting from step
+    for (let i = step; i < totalDays; i += step) {
+      const day = minES + i
+      if (!labelSet.has(day)) {
+        labels.push({ day, position: i })
+        labelSet.add(day)
+      }
+    }
+    
+    // Always include the last day if not already included
+    if (!labelSet.has(maxEF)) {
+      labels.push({ day: maxEF, position: totalDays })
+      labelSet.add(maxEF)
+    }
+    
+    // Sort by day value to ensure chronological order
+    labels.sort((a, b) => a.day - b.day)
+    
+    // Remove any duplicates that might have been created
+    const uniqueLabels = []
+    const seenDays = new Set()
+    labels.forEach(label => {
+      if (!seenDays.has(label.day)) {
+        uniqueLabels.push({
+          ...label,
+          position: label.day - minES // Recalculate position based on sorted day
+        })
+        seenDays.add(label.day)
+      }
+    })
+    
+    return uniqueLabels
   }
 
   const timelineLabels = generateTimelineLabels()
@@ -166,7 +231,17 @@ function GanttChart({ projectId }) {
         </div>
         <div className="gantt-info">
           <span>Total Tasks: {tasks.length}</span>
-          <span>Critical Tasks: {tasks.filter(t => t.is_critical).length}</span>
+          <span>Critical Tasks: {tasks.filter(t => {
+            // Check multiple possible field names and conditions for critical tasks
+            return t.is_critical === true || 
+                   t.critical === true || 
+                   t.Critical === true ||
+                   t.is_critical === 'Yes' ||
+                   t.critical === 'Yes' ||
+                   (t.total_float !== undefined && t.total_float === 0) ||
+                   (t.Total_Float !== undefined && t.Total_Float === 0) ||
+                   (t.float !== undefined && t.float === 0)
+          }).length}</span>
         </div>
       </div>
 
@@ -174,17 +249,17 @@ function GanttChart({ projectId }) {
       <div className="gantt-timeline-header">
         <div className="task-name-header" style={{ width: '200px' }}>Task Name</div>
         <div className="timeline-header" style={{ width: `${chartWidth}px`, position: 'relative' }}>
-          {timelineLabels.map((day, index) => (
+          {timelineLabels.map((item, index) => (
             <div
               key={index}
               className="timeline-marker"
               style={{
-                left: `${((day - minES) * scale)}px`,
+                left: `${item.position * scale}px`,
                 position: 'absolute',
               }}
             >
               <div className="marker-line"></div>
-              <div className="marker-label">Day {day}</div>
+              <div className="marker-label">Day {item.day}</div>
             </div>
           ))}
         </div>
@@ -199,6 +274,16 @@ function GanttChart({ projectId }) {
             const left = startOffset * scale
             const width = duration * scale
 
+            // Determine if task is critical
+            const isCritical = task.is_critical === true || 
+                             task.critical === true || 
+                             task.Critical === true ||
+                             task.is_critical === 'Yes' ||
+                             task.critical === 'Yes' ||
+                             (task.total_float !== undefined && task.total_float === 0) ||
+                             (task.Total_Float !== undefined && task.Total_Float === 0) ||
+                             (task.float !== undefined && task.float === 0)
+
             return (
               <div key={index} className="gantt-task-row">
                 <div className="task-name-column" style={{ width: '200px' }}>
@@ -206,25 +291,22 @@ function GanttChart({ projectId }) {
                     {task.name || task.task_name}
                   </div>
                   <div className="task-id-gantt">
-                    ID: {task.task_id || task.id}
+                    ({task.task_id || task.id || task.activity_id || 'N/A'})
                   </div>
                 </div>
                 <div 
                   className="gantt-bar-container"
                   style={{ 
                     width: `${chartWidth}px`,
-                    position: 'relative',
-                    height: '50px',
-                    background: '#f9fafb',
-                    border: '1px solid #e5e7eb',
+                    '--scale': `${scale}px`,
                   }}
                 >
                   <div
-                    className={`gantt-bar ${task.is_critical ? 'critical' : 'normal'}`}
+                    className={`gantt-bar ${isCritical ? 'critical' : 'normal'}`}
                     style={{
                       position: 'absolute',
                       left: `${left}px`,
-                      width: `${width}px`,
+                      width: `${Math.max(width, 20)}px`,
                       height: '40px',
                       top: '5px',
                       borderRadius: '4px',
@@ -232,17 +314,30 @@ function GanttChart({ projectId }) {
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: 'white',
-                      fontSize: '11px',
+                      fontSize: width >= 30 ? '11px' : '9px',
                       fontWeight: 600,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
+                      minWidth: '20px',
                     }}
-                    title={`${task.name || task.task_name}: ${duration} days (ES: ${task.es}, EF: ${task.ef})`}
+                    title={`${task.name || task.task_name}: ${duration} day${duration !== 1 ? 's' : ''} (ES: Day ${task.es}, EF: Day ${task.ef})`}
                   >
-                    {duration}d
+                    {width >= 30 ? `${duration}d` : duration}
                   </div>
-                  {task.is_critical && (
-                    <div className="critical-indicator" title="Critical Task">
+                  {isCritical && (
+                    <div 
+                      className="critical-indicator" 
+                      title="Critical Task"
+                      style={{
+                        position: 'absolute',
+                        right: '5px',
+                        top: '5px',
+                        fontSize: '14px',
+                        color: '#dc2626',
+                        fontWeight: 'bold',
+                        zIndex: 6,
+                      }}
+                    >
                       ⚠
                     </div>
                   )}

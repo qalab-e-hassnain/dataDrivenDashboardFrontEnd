@@ -153,26 +153,32 @@
 /* Timeline Header */
 .gantt-timeline-header {
   display: flex;
-  background: #f9fafb;
+  background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 8px 8px 0 0;
-  padding: 8px;
+  padding: 10px 8px;
   font-size: 11px;
   font-weight: 600;
   color: #374151;
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  border-bottom: 2px solid #e5e7eb;
 }
 
 .task-name-header {
   padding: 0 10px;
+  flex-shrink: 0;
 }
 
 .timeline-header {
   position: relative;
-  height: 40px;
+  height: 55px;
   border-left: 1px solid #e5e7eb;
+  overflow: visible;
+  padding-top: 6px;
+  background: #f9fafb;
 }
 
 .timeline-marker {
@@ -182,19 +188,33 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .marker-line {
   width: 1px;
-  height: 20px;
-  background: #d1d5db;
-  margin-bottom: 4px;
+  height: 18px;
+  background: #9ca3af;
+  margin-bottom: 5px;
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .marker-label {
   font-size: 10px;
-  color: #6b7280;
+  color: #374151;
   white-space: nowrap;
+  font-weight: 600;
+  padding: 3px 6px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  text-align: center;
+  min-width: 48px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  line-height: 1.2;
 }
 
 /* Gantt Content */
@@ -215,22 +235,32 @@
 .gantt-task-row {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
   min-height: 50px;
   transition: background 0.2s;
+  background: white;
 }
 
 .gantt-task-row:hover {
   background: #f9fafb;
 }
 
+.gantt-task-row:nth-child(even) {
+  background: #fafbfc;
+}
+
+.gantt-task-row:nth-child(even):hover {
+  background: #f3f4f6;
+}
+
 .task-name-column {
   padding: 8px 10px;
   border-right: 1px solid #e5e7eb;
-  background: white;
+  background: inherit;
   position: sticky;
   left: 0;
   z-index: 5;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .task-name-gantt {
@@ -243,6 +273,13 @@
 .task-id-gantt {
   font-size: 11px;
   color: #6b7280;
+}
+
+.gantt-bar-container {
+  position: relative;
+  height: 50px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
 }
 
 .gantt-bar {
