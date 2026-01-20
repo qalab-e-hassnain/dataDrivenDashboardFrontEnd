@@ -317,7 +317,7 @@ function CriticalPathView({ projectId }) {
         </div>
       )}
 
-      {/* PART B - CPM Tables (Following Guide Format) */}
+      {/* PART B - CPM Tables */}
       {criticalPath.activities && criticalPath.activities.length > 0 && (
         <div className="cpm-tables-section">
           <h3 className="section-subtitle">CPM Tables (Following Agreed Schema)</h3>
