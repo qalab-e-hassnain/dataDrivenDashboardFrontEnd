@@ -115,6 +115,7 @@ export const transformEVMMetrics = (evmData, projectData) => {
       scheduleVariance: evmData.schedule_variance || evmData.sv || evmData.metrics?.schedule_variance || 0,
       costVariance: evmData.cost_variance || evmData.cv || evmData.metrics?.cost_variance || 0,
       scheduleVariancePercentage: evmData.schedule_variance_percentage || evmData.metrics?.schedule_variance_percentage || null, // ✅ From API
+      scheduleDelayPercentage: evmData.schedule_delay_percentage || evmData.metrics?.schedule_delay_percentage || null, // ✅ New field: (1 - SPI) × 100
       costVariancePercentage: evmData.cost_variance_percentage || evmData.metrics?.cost_variance_percentage || null, // ✅ From API
       eac: evmData.estimate_at_completion || evmData.eac || evmData.metrics?.estimate_at_completion || 0,
       etc: evmData.estimate_to_complete || evmData.etc || evmData.metrics?.estimate_to_complete || 0,
@@ -610,9 +611,16 @@ export const transformKPIData = (evmData, forecastData, projectData) => {
 
   const daysRemaining = calculateDaysRemaining()
 
-  // ✅ Use schedule_variance_percentage and cost_variance_percentage from API
+  // ✅ Use schedule_delay_percentage (preferred) or schedule_variance_percentage from API
+  let scheduleDelayPercentage = evmData?.schedule_delay_percentage ?? null
   let scheduleVariancePercentage = evmData?.schedule_variance_percentage ?? null
   let costVariancePercentage = evmData?.cost_variance_percentage ?? null
+  
+  // Validate delay percentage (preferred for "behind schedule" display)
+  if (scheduleDelayPercentage !== null && (typeof scheduleDelayPercentage !== 'number' || !isFinite(scheduleDelayPercentage))) {
+    console.warn('Invalid schedule_delay_percentage from API:', evmData?.schedule_delay_percentage)
+    scheduleDelayPercentage = null
+  }
   
   // Validate variance percentages
   if (scheduleVariancePercentage !== null && (typeof scheduleVariancePercentage !== 'number' || !isFinite(scheduleVariancePercentage))) {
@@ -631,7 +639,8 @@ export const transformKPIData = (evmData, forecastData, projectData) => {
     completion: Math.round(completion),
     aiConfidence: Math.round(aiConfidence),
     daysRemaining: daysRemaining, // ✅ Days remaining calculated from estimated_completion_date
-    scheduleVariancePercentage: scheduleVariancePercentage, // ✅ From API
+    scheduleDelayPercentage: scheduleDelayPercentage, // ✅ New field: (1 - SPI) × 100, preferred for "behind schedule"
+    scheduleVariancePercentage: scheduleVariancePercentage, // ✅ From API (fallback)
     costVariancePercentage: costVariancePercentage, // ✅ From API
   }
 }

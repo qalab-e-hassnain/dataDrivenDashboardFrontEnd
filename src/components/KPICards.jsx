@@ -24,20 +24,27 @@ function KPICards({ data }) {
   const completion = Math.round(data.completion || 68)
   const aiConfidence = Math.round(data.aiConfidence || 87)
 
-  // ✅ Use schedule_variance_percentage from API (backend should provide this)
-  let scheduleVariancePercent = data.scheduleVariancePercentage
-  // Validate and clamp schedule variance percentage
-  if (scheduleVariancePercent === null || scheduleVariancePercent === undefined) {
+  // ✅ Use schedule_delay_percentage (preferred) or schedule_variance_percentage from API
+  // schedule_delay_percentage = (1 - SPI) × 100, which correctly shows "behind schedule" percentage
+  let scheduleDelayPercent = data.scheduleDelayPercentage
+  
+  // If schedule_delay_percentage is not available, fall back to schedule_variance_percentage
+  if (scheduleDelayPercent === null || scheduleDelayPercent === undefined) {
+    scheduleDelayPercent = data.scheduleVariancePercentage
+  }
+  
+  // Validate and clamp schedule delay percentage
+  if (scheduleDelayPercent === null || scheduleDelayPercent === undefined) {
     // Fallback: Calculate from SPI if API doesn't provide it (for backward compatibility)
-    scheduleVariancePercent = spi < 1 
+    scheduleDelayPercent = spi < 1 
       ? Math.max(0, Math.min(100, Math.round((1 - spi) * 100)))
       : 0
-  } else if (typeof scheduleVariancePercent !== 'number' || !isFinite(scheduleVariancePercent)) {
-    console.warn('Invalid scheduleVariancePercentage:', data.scheduleVariancePercentage, 'Using fallback')
-    scheduleVariancePercent = spi < 1 ? Math.max(0, Math.min(100, Math.round((1 - spi) * 100))) : 0
+  } else if (typeof scheduleDelayPercent !== 'number' || !isFinite(scheduleDelayPercent)) {
+    console.warn('Invalid scheduleDelayPercentage:', data.scheduleDelayPercentage, 'Using fallback')
+    scheduleDelayPercent = spi < 1 ? Math.max(0, Math.min(100, Math.round((1 - spi) * 100))) : 0
   } else {
     // Clamp to 0-100% range for safety
-    scheduleVariancePercent = Math.max(0, Math.min(100, Math.round(scheduleVariancePercent)))
+    scheduleDelayPercent = Math.max(0, Math.min(100, Math.round(scheduleDelayPercent)))
   }
 
   // ✅ Use cost_variance_percentage from API (backend should provide this)
@@ -61,9 +68,9 @@ function KPICards({ data }) {
       title: 'Schedule Performance Index (SPI)',
       value: spi,
       description: spi < 1 
-        ? `↓ Behind schedule by ${scheduleVariancePercent}%`
+        ? `↓ Behind schedule by ${scheduleDelayPercent}%`
         : spi > 1
-        ? `↑ Ahead of schedule by ${Math.max(0, Math.min(100, scheduleVariancePercent < 0 ? Math.abs(scheduleVariancePercent) : Math.round((spi - 1) * 100)))}%`
+        ? `↑ Ahead of schedule by ${Math.max(0, Math.min(100, Math.round((spi - 1) * 100)))}%`
         : '✓ On schedule',
       icon: '📊',
       gradient: 'purple',
