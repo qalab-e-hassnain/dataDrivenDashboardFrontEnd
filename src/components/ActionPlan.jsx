@@ -40,7 +40,13 @@ function ActionPlan({ actionPlan }) {
       case 'immediate': return '🚨'
       case 'this_week': return '📅'
       case 'this_month': return '📆'
+      case 'future': return '🗓️'
       case 'next_quarter': return '🗓️'
+      // Legacy support
+      case 'immediate_actions': return '🚨'
+      case 'short_term': return '📅'
+      case 'medium_term': return '📆'
+      case 'long_term': return '🗓️'
       default: return '⏱️'
     }
   }
@@ -50,10 +56,50 @@ function ActionPlan({ actionPlan }) {
       case 'immediate': return 'Immediate'
       case 'this_week': return 'This Week'
       case 'this_month': return 'This Month'
+      case 'future': return 'Future'
       case 'next_quarter': return 'Next Quarter'
+      // Legacy support
+      case 'immediate_actions': return 'Immediate'
+      case 'short_term': return 'This Week'
+      case 'medium_term': return 'This Month'
+      case 'long_term': return 'Future'
       default: return 'Future'
     }
   }
+
+  // Calculate counts from actual action_plan data to ensure accuracy
+  const calculateCounts = () => {
+    const counts = {
+      total: 0,
+      immediate: 0,
+      this_week: 0,
+      this_month: 0,
+      future: 0
+    }
+
+    if (actionPlan.action_plan) {
+      Object.entries(actionPlan.action_plan).forEach(([timeline, actions]) => {
+        const actionCount = Array.isArray(actions) ? actions.length : 0
+        counts.total += actionCount
+
+        // Map timeline keys to count fields
+        const timelineLower = timeline.toLowerCase()
+        if (timelineLower === 'immediate' || timelineLower === 'immediate_actions') {
+          counts.immediate += actionCount
+        } else if (timelineLower === 'this_week' || timelineLower === 'short_term') {
+          counts.this_week += actionCount
+        } else if (timelineLower === 'this_month' || timelineLower === 'medium_term') {
+          counts.this_month += actionCount
+        } else if (timelineLower === 'future' || timelineLower === 'long_term' || timelineLower === 'next_quarter') {
+          counts.future += actionCount
+        }
+      })
+    }
+
+    return counts
+  }
+
+  const counts = calculateCounts()
 
   return (
     <div className="action-plan">
@@ -67,29 +113,36 @@ function ActionPlan({ actionPlan }) {
           <div className="stat-card">
             <div className="stat-icon">🎯</div>
             <div className="stat-content">
-              <div className="stat-value">{actionPlan.total_recommendations || 0}</div>
+              <div className="stat-value">{counts.total}</div>
               <div className="stat-label">Total Actions</div>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon">🚨</div>
             <div className="stat-content">
-              <div className="stat-value">{actionPlan.immediate_actions || 0}</div>
+              <div className="stat-value">{counts.immediate}</div>
               <div className="stat-label">Immediate</div>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon">📅</div>
             <div className="stat-content">
-              <div className="stat-value">{actionPlan.this_week_actions || 0}</div>
+              <div className="stat-value">{counts.this_week}</div>
               <div className="stat-label">This Week</div>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon">📆</div>
             <div className="stat-content">
-              <div className="stat-value">{actionPlan.this_month_actions || 0}</div>
+              <div className="stat-value">{counts.this_month}</div>
               <div className="stat-label">This Month</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon">🗓️</div>
+            <div className="stat-content">
+              <div className="stat-value">{counts.future}</div>
+              <div className="stat-label">Future</div>
             </div>
           </div>
         </div>
