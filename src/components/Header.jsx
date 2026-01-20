@@ -243,8 +243,32 @@ function Header({ projectId, onProjectChange, onRefresh, refreshing = false, onU
       // Ensure progress is at 100% on completion
       setUploadProgress(100)
       
-      // Show success message
-      const successMessage = response?.message || `File "${file.name}" uploaded successfully!`
+      // Build detailed success message with task counts
+      let successMessage = response?.message || `File "${file.name}" uploaded successfully!`
+      
+      // Add task creation/update details if available
+      if (response?.tasks_created !== undefined || response?.tasks_updated !== undefined) {
+        const created = response.tasks_created || 0
+        const updated = response.tasks_updated || 0
+        const details = []
+        
+        if (created > 0) {
+          details.push(`${created} task${created !== 1 ? 's' : ''} created`)
+        }
+        if (updated > 0) {
+          details.push(`${updated} task${updated !== 1 ? 's' : ''} updated`)
+        }
+        
+        if (details.length > 0) {
+          successMessage += ` (${details.join(', ')})`
+        }
+        
+        // Add note about duplicate prevention
+        if (updated > 0) {
+          successMessage += '. Existing tasks were updated instead of creating duplicates.'
+        }
+      }
+      
       if (onUploadSuccess) {
         onUploadSuccess(successMessage, 'success')
       }
