@@ -26,9 +26,29 @@ if (import.meta.env.DEV) {
   console.log('📝 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'Not set (using default)')
 }
 
+// CRITICAL: Ensure API_BASE_URL is HTTPS before creating axios instance
+// This must happen BEFORE axios.create() to prevent any HTTP requests
+const FINAL_API_BASE_URL = (() => {
+  let url = API_BASE_URL
+  // Force HTTPS for production URLs
+  if (url.startsWith('http://') && !url.includes('localhost')) {
+    console.warn('⚠️ Security: Converting HTTP to HTTPS before axios instance creation')
+    url = url.replace('http://', 'https://')
+  }
+  // Double-check for Azure URLs
+  if (url.includes('azurewebsites.net') && url.startsWith('http://')) {
+    console.warn('⚠️ Security: Forcing HTTPS for Azure URL before axios instance creation')
+    url = url.replace('http://', 'https://')
+  }
+  return url
+})()
+
+// Log the final URL that will be used
+console.log('🔗 Final API Base URL (used by axios):', FINAL_API_BASE_URL)
+
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: FINAL_API_BASE_URL, // Use the guaranteed HTTPS URL
   headers: {
     'Content-Type': 'application/json',
   },
@@ -40,6 +60,32 @@ const api = axios.create({
 
 // Axios interceptor to remove Content-Type for FormData and handle CORS
 api.interceptors.request.use((config) => {
+  // CRITICAL: Force HTTPS FIRST - before any other processing
+  // Override baseURL directly to ensure HTTPS is always used
+  if (config.baseURL && config.baseURL.startsWith('http://') && !config.baseURL.includes('localhost')) {
+    console.error('🚨 CRITICAL: HTTP detected in interceptor! Converting to HTTPS:', config.baseURL)
+    config.baseURL = config.baseURL.replace('http://', 'https://')
+  }
+  
+  // Also override the axios instance default if somehow it got changed
+  if (api.defaults.baseURL && api.defaults.baseURL.startsWith('http://') && !api.defaults.baseURL.includes('localhost')) {
+    console.error('🚨 CRITICAL: HTTP detected in axios.defaults.baseURL! Converting to HTTPS')
+    api.defaults.baseURL = api.defaults.baseURL.replace('http://', 'https://')
+    config.baseURL = api.defaults.baseURL // Use the corrected default
+  }
+  
+  // Ensure config.baseURL uses the FINAL_API_BASE_URL if somehow it's still HTTP
+  if (!config.baseURL || (config.baseURL.startsWith('http://') && !config.baseURL.includes('localhost'))) {
+    console.error('🚨 CRITICAL: Forcing FINAL_API_BASE_URL due to HTTP detected')
+    config.baseURL = FINAL_API_BASE_URL
+  }
+  
+  // Also check the full URL if baseURL is not set (shouldn't happen, but safety check)
+  if (config.url && config.url.startsWith('http://') && !config.url.includes('localhost')) {
+    console.error('🚨 CRITICAL: HTTP detected in config.url! Converting to HTTPS:', config.url)
+    config.url = config.url.replace('http://', 'https://')
+  }
+  
   // If data is FormData, remove Content-Type header to let browser set it with boundary
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type']
@@ -49,42 +95,50 @@ api.interceptors.request.use((config) => {
     }
   }
   
-  // CRITICAL: Force HTTPS for all production URLs (prevents mixed content errors)
-  // This runs on every request to catch any HTTP URLs that might have been cached or set elsewhere
-  if (config.baseURL && config.baseURL.startsWith('http://') && !config.baseURL.includes('localhost')) {
-    console.warn('⚠️ Security: Converting HTTP baseURL to HTTPS in request interceptor:', config.baseURL)
-    config.baseURL = config.baseURL.replace('http://', 'https://')
-  }
-  
-  // Also check the full URL if baseURL is not set (shouldn't happen, but safety check)
-  if (config.url && config.url.startsWith('http://') && !config.url.includes('localhost')) {
-    console.warn('⚠️ Security: Converting HTTP URL to HTTPS in request interceptor:', config.url)
-    config.url = config.url.replace('http://', 'https://')
-  }
-  
   // Ensure withCredentials is false for all requests to avoid CORS preflight issues
   if (config.withCredentials === undefined) {
     config.withCredentials = false
   }
   
+  // FINAL SAFETY: Construct the full URL and force HTTPS if needed
+  const constructedURL = config.baseURL ? `${config.baseURL}${config.url}` : config.url
+  if (constructedURL && constructedURL.startsWith('http://') && !constructedURL.includes('localhost')) {
+    console.error('🚨 CRITICAL: Full URL is HTTP! Forcing HTTPS conversion')
+    // Reconstruct with HTTPS
+    const httpsBaseURL = config.baseURL?.replace('http://', 'https://') || FINAL_API_BASE_URL
+    config.baseURL = httpsBaseURL
+    // Reconstruct the full URL
+    const httpsFullURL = `${httpsBaseURL}${config.url}`
+    console.error('   Original URL:', constructedURL)
+    console.error('   Fixed URL:', httpsFullURL)
+  }
+  
   // Log request details for debugging (only in development or for POST requests)
   if (import.meta.env.DEV || config.method?.toUpperCase() === 'POST') {
-    const fullURL = config.baseURL ? `${config.baseURL}${config.url}` : config.url
+    const finalURL = config.baseURL ? `${config.baseURL}${config.url}` : config.url
     console.log(`🌐 ${config.method?.toUpperCase()} ${config.url}`, {
       baseURL: config.baseURL,
-      fullURL: fullURL,
-      isHTTPS: fullURL?.startsWith('https://'),
-      isHTTP: fullURL?.startsWith('http://'),
+      axiosDefaultsBaseURL: api.defaults.baseURL,
+      FINAL_API_BASE_URL: FINAL_API_BASE_URL,
+      fullURL: finalURL,
+      isHTTPS: finalURL?.startsWith('https://'),
+      isHTTP: finalURL?.startsWith('http://'),
       headers: config.headers,
       withCredentials: config.withCredentials,
     })
     
     // Final safety check: if it's still HTTP (shouldn't happen), log a warning
-    if (fullURL && fullURL.startsWith('http://') && !fullURL.includes('localhost')) {
-      console.error('🚨 CRITICAL: Request is still using HTTP! This will fail in production.')
+    if (finalURL && finalURL.startsWith('http://') && !finalURL.includes('localhost')) {
+      console.error('🚨 CRITICAL: Request is STILL using HTTP after all fixes!')
+      console.error('   This indicates a deeper issue - possibly cached bundle or service worker')
       console.error('   baseURL:', config.baseURL)
       console.error('   url:', config.url)
-      console.error('   fullURL:', fullURL)
+      console.error('   fullURL:', finalURL)
+      console.error('   Attempting emergency HTTPS fix...')
+      // Emergency fix: directly modify the URL
+      if (config.url && !config.url.startsWith('http')) {
+        config.baseURL = FINAL_API_BASE_URL
+      }
     }
   }
   
@@ -196,17 +250,10 @@ export const apiService = {
   createProject: async (projectData) => {
     try {
       // Log the base URL before making the request to debug CORS issues
-      console.log('🔍 Creating project with baseURL:', API_BASE_URL)
-      console.log('🔍 Full URL will be:', `${API_BASE_URL}/projects`)
-      
-      // Ensure baseURL is HTTPS (double-check before request)
-      const safeBaseURL = API_BASE_URL.startsWith('http://') && !API_BASE_URL.includes('localhost')
-        ? API_BASE_URL.replace('http://', 'https://')
-        : API_BASE_URL
-      
-      if (safeBaseURL !== API_BASE_URL) {
-        console.warn('⚠️ Fixed HTTP to HTTPS for project creation:', safeBaseURL)
-      }
+      console.log('🔍 Creating project with baseURL:', FINAL_API_BASE_URL)
+      console.log('🔍 Full URL will be:', `${FINAL_API_BASE_URL}/projects`)
+      console.log('🔍 Axios instance baseURL:', api.defaults.baseURL)
+      console.log('🔍 Environment VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'Not set')
       
       // Use longer timeout for project creation (60 seconds) to handle validation and database operations
       // Note: Don't override headers - let the interceptor handle it to avoid CORS preflight issues
