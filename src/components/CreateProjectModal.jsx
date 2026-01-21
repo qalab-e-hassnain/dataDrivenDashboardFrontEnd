@@ -362,12 +362,22 @@ function CreateProjectModal({ isOpen, onClose, onProjectCreated, onUploadSuccess
           generalErrorMessage = detail || data?.message || `Failed to create project: ${error.response.statusText || status}`
         }
         
-      } else if (error.request) {
+      } else if (error.request || error.code === 'ERR_NETWORK') {
         // Request was made but no response received (timeout, network error, CORS)
         if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
           generalErrorMessage = 'Request timed out. The server may be busy. Please try again.'
-        } else if (error.message?.includes('Network Error') || error.message?.includes('Failed to fetch')) {
-          generalErrorMessage = 'Network error. Unable to connect to server. Please check your internet connection.'
+        } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error') || error.message?.includes('Failed to fetch')) {
+          // Network error - could be CORS, server down, or connectivity issue
+          generalErrorMessage = 'Network error: Unable to connect to the API server. This could be due to:\n\n' +
+            '• CORS policy blocking the request\n' +
+            '• API server is not running or unreachable\n' +
+            '• Incorrect API endpoint URL\n' +
+            '• Internet connectivity issues\n\n' +
+            'Please check:\n' +
+            '1. The API server is running\n' +
+            '2. CORS settings allow requests from this domain\n' +
+            '3. The API_BASE_URL is correctly configured\n' +
+            '4. Your internet connection is working'
         } else {
           generalErrorMessage = 'Unable to reach the server. Please try again later.'
         }

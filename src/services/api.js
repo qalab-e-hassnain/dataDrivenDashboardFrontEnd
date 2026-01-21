@@ -13,6 +13,12 @@ if (API_BASE_URL.startsWith('http://') && !API_BASE_URL.includes('localhost')) {
   API_BASE_URL = API_BASE_URL.replace('http://', 'https://')
 }
 
+// Additional safety: Force HTTPS for Azure URLs even if they come from env vars
+if (API_BASE_URL.includes('azurewebsites.net') && API_BASE_URL.startsWith('http://')) {
+  console.warn('⚠️ Security: Forcing HTTPS for Azure API URL')
+  API_BASE_URL = API_BASE_URL.replace('http://', 'https://')
+}
+
 // Log API URL for debugging (only in development)
 if (import.meta.env.DEV) {
   console.log('🔗 API Base URL:', API_BASE_URL)
@@ -28,9 +34,11 @@ const api = axios.create({
   },
   timeout: 20000, // 20 second timeout for all requests
   maxRedirects: 5, // Follow redirects automatically
+  // Don't send credentials to avoid CORS preflight issues
+  withCredentials: false,
 })
 
-// Axios interceptor to remove Content-Type for FormData
+// Axios interceptor to remove Content-Type for FormData and handle CORS
 api.interceptors.request.use((config) => {
   // If data is FormData, remove Content-Type header to let browser set it with boundary
   if (config.data instanceof FormData) {
@@ -40,6 +48,46 @@ api.interceptors.request.use((config) => {
       delete config.headers.common['Content-Type']
     }
   }
+  
+  // CRITICAL: Force HTTPS for all production URLs (prevents mixed content errors)
+  // This runs on every request to catch any HTTP URLs that might have been cached or set elsewhere
+  if (config.baseURL && config.baseURL.startsWith('http://') && !config.baseURL.includes('localhost')) {
+    console.warn('⚠️ Security: Converting HTTP baseURL to HTTPS in request interceptor:', config.baseURL)
+    config.baseURL = config.baseURL.replace('http://', 'https://')
+  }
+  
+  // Also check the full URL if baseURL is not set (shouldn't happen, but safety check)
+  if (config.url && config.url.startsWith('http://') && !config.url.includes('localhost')) {
+    console.warn('⚠️ Security: Converting HTTP URL to HTTPS in request interceptor:', config.url)
+    config.url = config.url.replace('http://', 'https://')
+  }
+  
+  // Ensure withCredentials is false for all requests to avoid CORS preflight issues
+  if (config.withCredentials === undefined) {
+    config.withCredentials = false
+  }
+  
+  // Log request details for debugging (only in development or for POST requests)
+  if (import.meta.env.DEV || config.method?.toUpperCase() === 'POST') {
+    const fullURL = config.baseURL ? `${config.baseURL}${config.url}` : config.url
+    console.log(`🌐 ${config.method?.toUpperCase()} ${config.url}`, {
+      baseURL: config.baseURL,
+      fullURL: fullURL,
+      isHTTPS: fullURL?.startsWith('https://'),
+      isHTTP: fullURL?.startsWith('http://'),
+      headers: config.headers,
+      withCredentials: config.withCredentials,
+    })
+    
+    // Final safety check: if it's still HTTP (shouldn't happen), log a warning
+    if (fullURL && fullURL.startsWith('http://') && !fullURL.includes('localhost')) {
+      console.error('🚨 CRITICAL: Request is still using HTTP! This will fail in production.')
+      console.error('   baseURL:', config.baseURL)
+      console.error('   url:', config.url)
+      console.error('   fullURL:', fullURL)
+    }
+  }
+  
   return config
 })
 
@@ -147,13 +195,51 @@ export const apiService = {
   // Create Project (with increased timeout for validation and database operations)
   createProject: async (projectData) => {
     try {
+      // Log the base URL before making the request to debug CORS issues
+      console.log('🔍 Creating project with baseURL:', API_BASE_URL)
+      console.log('🔍 Full URL will be:', `${API_BASE_URL}/projects`)
+      
+      // Ensure baseURL is HTTPS (double-check before request)
+      const safeBaseURL = API_BASE_URL.startsWith('http://') && !API_BASE_URL.includes('localhost')
+        ? API_BASE_URL.replace('http://', 'https://')
+        : API_BASE_URL
+      
+      if (safeBaseURL !== API_BASE_URL) {
+        console.warn('⚠️ Fixed HTTP to HTTPS for project creation:', safeBaseURL)
+      }
+      
       // Use longer timeout for project creation (60 seconds) to handle validation and database operations
+      // Note: Don't override headers - let the interceptor handle it to avoid CORS preflight issues
       const response = await api.post('/projects', projectData, {
-        timeout: 60000 // 60 seconds timeout
+        timeout: 60000, // 60 seconds timeout
+        // Removed explicit headers to let interceptor handle them (reduces CORS preflight complexity)
+        // The default Content-Type: application/json from axios instance is sufficient
+        withCredentials: false,
       })
       return response.data
     } catch (error) {
-      console.error('Error creating project:', error)
+      console.error('❌ Error creating project:', error)
+      console.error('📋 Error details:', {
+        message: error.message,
+        code: error.code,
+        name: error.name,
+        response: error.response?.data,
+        status: error.response?.status,
+        requestURL: error.config?.url,
+        requestMethod: error.config?.method,
+        requestBaseURL: error.config?.baseURL,
+        requestHeaders: error.config?.headers,
+        fullURL: error.config?.baseURL ? `${error.config.baseURL}${error.config.url}` : error.config?.url,
+      })
+      
+      // Log if it's a CORS/network error
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        console.error('🚨 Network Error Details:')
+        console.error('  - This usually means the request was blocked before reaching the server')
+        console.error('  - Check if baseURL is HTTPS:', error.config?.baseURL)
+        console.error('  - Check browser Network tab for OPTIONS preflight request')
+        console.error('  - Verify CORS headers on the backend for POST /projects')
+      }
       
       // Enhance error object with helpful information
       if (error.response) {

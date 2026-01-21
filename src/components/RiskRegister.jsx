@@ -246,14 +246,34 @@ const RiskRegister = ({ projectId }) => {
   }
 
   const getStatusGradient = (status) => {
+    // Normalize status to lowercase for comparison
+    const normalizedStatus = status?.toLowerCase() || ''
     const gradients = {
       identified: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      ai_identified: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', // Purple gradient for AI
+      user_identified: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)', // Cyan gradient for user
       analyzed: 'linear-gradient(135deg, #ffc107 0%, #ffd54f 100%)',
       mitigated: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
       closed: 'linear-gradient(135deg, #6c757d 0%, #5a6268 100%)',
       occurred: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)'
     }
-    return gradients[status] || 'linear-gradient(135deg, #6c757d 0%, #5a6268 100%)'
+    return gradients[normalizedStatus] || 'linear-gradient(135deg, #6c757d 0%, #5a6268 100%)'
+  }
+
+  const formatStatusForDisplay = (status) => {
+    // Convert backend status values to human-readable format
+    const statusMap = {
+      'ai_identified': 'AI Identified',
+      'user_identified': 'User Identified',
+      'identified': 'Identified',
+      'analyzed': 'Analyzed',
+      'mitigated': 'Mitigated',
+      'closed': 'Closed',
+      'occurred': 'Occurred'
+    }
+    // Handle both snake_case and already formatted statuses
+    const normalizedStatus = status?.toLowerCase() || ''
+    return statusMap[normalizedStatus] || status || 'Unknown'
   }
 
   if (loading && risks.length === 0) {
@@ -349,6 +369,8 @@ const RiskRegister = ({ projectId }) => {
           onChange={(e) => setFilters({ ...filters, status: e.target.value || null })}
         >
           <option value="">All Statuses</option>
+          <option value="ai_identified">AI Identified</option>
+          <option value="user_identified">User Identified</option>
           <option value="identified">Identified</option>
           <option value="analyzed">Analyzed</option>
           <option value="mitigated">Mitigated</option>
@@ -402,7 +424,7 @@ const RiskRegister = ({ projectId }) => {
                     className="status-badge"
                     style={{ background: getStatusGradient(risk.status) }}
                   >
-                    {risk.status}
+                    {formatStatusForDisplay(risk.status)}
                   </span>
                   <span className="category-badge">{risk.category}</span>
                 </div>

@@ -2,6 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  overflow: visible;
 }
 
 /* No Action Plan */
@@ -110,6 +114,9 @@
   display: flex;
   flex-direction: column;
   gap: 15px;
+  width: 100%;
+  min-height: 0; /* Allow flex shrinking */
+  overflow: visible; /* Ensure all sections are visible */
 }
 
 .timeline-section {
@@ -117,6 +124,10 @@
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 15px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: visible; /* Ensure all content is visible */
+  min-height: 0; /* Allow flex shrinking */
 }
 
 .timeline-header {
@@ -154,6 +165,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  min-height: 0; /* Allow flex shrinking */
+  overflow: visible; /* Ensure all cards are visible */
 }
 
 .action-card {
@@ -162,12 +176,23 @@
   border-radius: 8px;
   padding: 12px;
   transition: all 0.3s ease;
+  width: 100%;
+  min-height: 60px; /* Ensure minimum height */
+  box-sizing: border-box; /* Include padding in width */
+  position: relative; /* Ensure proper stacking */
+  z-index: 1; /* Ensure cards are above background */
+  display: block; /* Ensure block display */
+  opacity: 1 !important; /* Ensure visibility */
+  visibility: visible !important; /* Ensure visibility */
+  margin-bottom: 0; /* Remove any margin that might cause spacing issues */
+  flex-shrink: 0; /* Prevent cards from shrinking */
 }
 
 .action-card:hover {
   background: white;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
   border-color: #6366f1;
+  z-index: 2; /* Raise on hover */
 }
 
 .action-header {

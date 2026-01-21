@@ -160,8 +160,8 @@ function ActionPlan({ actionPlan }) {
               </div>
               
               <div className="timeline-actions-list">
-                {actions.map((action) => (
-                  <div key={action.id} className="action-card">
+                {actions.map((action, index) => (
+                  <div key={action.id || action.title || `action-${timeline}-${index}`} className="action-card">
                     <div className="action-header">
                       <div className="action-title-section">
                         <span className="action-category-icon">{getCategoryIcon(action.category)}</span>
