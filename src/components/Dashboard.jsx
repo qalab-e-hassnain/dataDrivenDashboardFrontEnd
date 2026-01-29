@@ -48,7 +48,14 @@ function Dashboard({ projectIdFromRoute }) {
 
   const addToast = (message, type = 'info') => {
     const id = Date.now()
-    setToasts((prev) => [...prev, { id, message, type }])
+    setToasts((prev) => {
+      // Avoid duplicate toasts: same message+type within last 3 seconds
+      const recent = prev.filter(
+        (t) => t.message === message && t.type === type && id - t.id < 3000
+      )
+      if (recent.length > 0) return prev
+      return [...prev, { id, message, type }]
+    })
   }
 
   const removeToast = (id) => {
@@ -220,12 +227,9 @@ function Dashboard({ projectIdFromRoute }) {
         setDashboardData(transformedData)
         setError(null) // Clear any previous errors
         
+        // Only show toast on explicit refresh; avoid toasts on every load (e.g. when returning from Gantt)
         if (isRefresh) {
           addToast('Data refreshed successfully', 'success')
-        } else {
-          // Show success message when project data is loaded
-          const projectName = projectData?.name || projectData?.title || 'Project'
-          addToast(`${projectName} data loaded successfully`, 'success')
         }
       } else {
         // No data received - use mock data
