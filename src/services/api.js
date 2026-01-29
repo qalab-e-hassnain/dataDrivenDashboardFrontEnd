@@ -251,13 +251,13 @@ export const apiService = {
     try {
       // Log the base URL before making the request to debug CORS issues
       console.log('🔍 Creating project with baseURL:', FINAL_API_BASE_URL)
-      console.log('🔍 Full URL will be:', `${FINAL_API_BASE_URL}/projects`)
+      console.log('🔍 Full URL will be:', `${FINAL_API_BASE_URL}/projects/`)
       console.log('🔍 Axios instance baseURL:', api.defaults.baseURL)
       console.log('🔍 Environment VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'Not set')
       
       // Use longer timeout for project creation (60 seconds) to handle validation and database operations
-      // Note: Don't override headers - let the interceptor handle it to avoid CORS preflight issues
-      const response = await api.post('/projects', projectData, {
+      // Use trailing slash to avoid 307 redirect (which can cause Mixed Content if redirect goes to HTTP)
+      const response = await api.post('/projects/', projectData, {
         timeout: 60000, // 60 seconds timeout
         // Removed explicit headers to let interceptor handle them (reduces CORS preflight complexity)
         // The default Content-Type: application/json from axios instance is sufficient
