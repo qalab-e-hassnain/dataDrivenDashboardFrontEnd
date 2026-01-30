@@ -24,6 +24,14 @@ function KPICards({ data }) {
   const completion = Math.round(data.completion || 68)
   const aiConfidence = Math.round(data.aiConfidence || 87)
 
+  // Dynamic description based on actual confidence from API (not hardcoded "High")
+  const aiConfidenceDescription =
+    aiConfidence >= 75
+      ? 'High prediction accuracy'
+      : aiConfidence >= 50
+        ? 'Moderate prediction accuracy'
+        : 'Low prediction accuracy — use with caution'
+
   // ✅ Use schedule_delay_percentage (preferred) or schedule_variance_percentage from API
   // schedule_delay_percentage = (1 - SPI) × 100, which correctly shows "behind schedule" percentage
   let scheduleDelayPercent = data.scheduleDelayPercentage
@@ -98,7 +106,7 @@ function KPICards({ data }) {
     {
       title: 'AI Confidence Score',
       value: `${aiConfidence}%`,
-      description: 'High prediction accuracy',
+      description: aiConfidenceDescription,
       icon: '🧠',
       gradient: 'pink',
     },
